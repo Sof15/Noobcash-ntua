@@ -1,71 +1,108 @@
 import block
 import wallet
+import transaction
+import requests
+
 
 class node:
-	def __init__():
-		self.NBC=100;
+	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
+		#self.NBC=0;#eixe 100 alla to theloume se transaction
 		##set
 
 		#self.chain
-		#self.current_id_count
+		
+		#self.id = 0 #bootstrap
 		#self.NBCs
-		#self.wallet
+		self.wallet = wallet.wallet()
+		bootstrap_ip = "192.168.1.1"
+		bootstrap_port = 5000
+		#here we store information for every node, as its id, ...
+		#...its address (ip:port) its public key and its balance 
+		
+		boot_info = "0"+bootstrap_ip+":"+str(bootstrap_port)+str(self.wallet.public_key, 'utf-8')
+		self.ring = []
+		# all nodes know the ip:port of bootstrap node 
+		self.ring.append(boot_info)
+		for i in range(4):
+			self.ring.append("") 
 
-		#slef.ring[]   #here we store information for every node, as its id, its address (ip:port) its public key and its balance 
+		# every node when first created 
+		# sends its ip/port to bootstrap
+		if (is_bootstrap==0):
+			data = {}
+			data["ip"] = ip
+			data["port"] = port
+			url = bootstrap_ip+":"+str(bootstrap_port)+"/register"
+			r = requests.post(url,data)
 
 
+	def create_new_block(self, is_bootstrap):
+		if is_bootstrap :
+			nonce = 0
+			my_hash = 1
+			sender = str.encode("0")
 
+			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
+			#edo isos na min einai sostos o tropos pou dimiourfoume to transactio
+			first_trans = transaction.Transaction(sender, sender, self.wallet.public_key, 100*5)
+			trans = [first_trans]
+			block_new = block.Block(nonce, my_hash, trans)
+		return block_new 
 
-	def.create_new_block():
-
-	def create_wallet():
+	#def create_wallet():
 		#create a wallet for this node, with a public key and a private key
+		#DE XREIAZETAI THARRW
+		
 
-	def register_node_to_ring():
+	def register_node_to_ring(self, is_bootstrap):
 		#add this node to the ring, only the bootstrap node can add a node to the ring after checking his wallet and ip:port address
 		#bottstrap node informs all other nodes and gives the request node an id and 100 NBCs
+		if is_bootstrap :
+			id_to_give = len(self.ring)
+			create_transaction()
 
-
-	def create_transaction(sender, receiver, signature):
+	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
+		#signature = PKCS1_v1_5.new(self.wallet.private_key)
+		trans = transaction.Transaction(self.wallet.public_key, (self.wallet).private_key, receiver, amount)
+		return (trans)
+
+	#def broadcast_transaction():
 
 
-	def broadcast_transaction():
 
 
 
-
-
-	def validdate_transaction():
+	#def validdate_transaction():
 		#use of signature and NBCs balance
 
 
-	def add_transaction_to_block():
+	#def add_transaction_to_block():
 		#if enough transactions  mine
 
 
 
-	def mine_block():
+	#def mine_block():
 
 
 
-	def broadcast_block():
+	#def broadcast_block():
 
 
 		
 
-	def valid_proof(.., difficulty=MINING_DIFFICULTY):
+	#def valid_proof(.., difficulty=MINING_DIFFICULTY):
 
 
 
 
 	#concencus functions
 
-	def valid_chain(self, chain):
+	#def valid_chain(self, chain):
 		#check for the longer chain accroose all nodes
 
 
-	def resolve_conflicts(self):
+	#def resolve_conflicts(self):
 		#resolve correct chain
 
 
