@@ -2,6 +2,7 @@ import block
 import wallet
 import transaction
 import requests
+import json
 
 
 class node:
@@ -23,17 +24,19 @@ class node:
 		self.ring = []
 		# all nodes know the ip:port of bootstrap node 
 		self.ring.append(boot_info)
-		for i in range(4):
-			self.ring.append("") 
+		
 
 		# every node when first created 
 		# sends its ip/port to bootstrap
 		if (is_bootstrap==0):
 			data = {}
+			data["public_key"] = self.wallet.public_key
 			data["ip"] = ip
 			data["port"] = port
-			url = bootstrap_ip+":"+str(bootstrap_port)+"/register"
+			#data = json.dumps(data)
+			url = "http://127.0.0.1"+":"+str(bootstrap_port)+"/register"
 			r = requests.post(url,data)
+			#print ("data to post:", r.text)
 
 
 	def create_new_block(self, is_bootstrap):
@@ -54,12 +57,19 @@ class node:
 		#DE XREIAZETAI THARRW
 		
 
-	def register_node_to_ring(self, is_bootstrap):
+	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
 		#add this node to the ring, only the bootstrap node can add a node to the ring after checking his wallet and ip:port address
 		#bottstrap node informs all other nodes and gives the request node an id and 100 NBCs
 		if is_bootstrap :
 			id_to_give = len(self.ring)
-			create_transaction()
+			node_info = str(id_to_give)+ip+":"+str(port)+str(self.wallet.public_key, 'utf-8')
+			self.ring.append(node_info)
+			data = {}
+			data["id"] = id_to_give
+			#ip, port 
+			url = "http://127.0.0.1"+":"+str(bootstrap_port)+"/get_id"
+			r = requests.post(url,data)
+			
 
 	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
