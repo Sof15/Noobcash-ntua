@@ -3,6 +3,7 @@ import wallet
 import transaction
 import requests
 import json
+import time 
 
 
 class node:
@@ -24,7 +25,7 @@ class node:
 		self.ring = []
 		# all nodes know the ip:port of bootstrap node 
 		self.ring.append(boot_info)
-		
+		print("start node")
 
 		# every node when first created 
 		# sends its ip/port to bootstrap
@@ -35,6 +36,7 @@ class node:
 			data["port"] = port
 			#data = json.dumps(data)
 			url = "http://127.0.0.1"+":"+str(bootstrap_port)+"/register"
+			print("visit node is posting...")
 			r = requests.post(url,data)
 			#print ("data to post:", r.text)
 
@@ -60,6 +62,7 @@ class node:
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
 		#add this node to the ring, only the bootstrap node can add a node to the ring after checking his wallet and ip:port address
 		#bottstrap node informs all other nodes and gives the request node an id and 100 NBCs
+		print("in here ?")
 		if is_bootstrap :
 			id_to_give = len(self.ring)
 			node_info = str(id_to_give)+ip+":"+str(port)+str(self.wallet.public_key, 'utf-8')
@@ -67,7 +70,9 @@ class node:
 			data = {}
 			data["id"] = id_to_give
 			#ip, port 
-			url = "http://127.0.0.1"+":"+str(bootstrap_port)+"/get_id"
+			print("boot is registering the guest node!")
+			url = "http://127.0.0.1"+":"+str(port)+"/get_id"
+			time.sleep(5)
 			r = requests.post(url,data)
 			
 
