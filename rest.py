@@ -1,24 +1,21 @@
 import requests
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
-import argparse
-
+from argparse import ArgumentParser
 import block
 import node
 #import blockchain
 import wallet
 #import transaction
-#import wallet
+import time
+import threading
 
-
-### JUST A BASIC EXAMPLE OF A REST API WITH FLASK
 
 
 
 app = Flask(__name__)
 CORS(app)
 #blockchain = Blockchain()
-from argparse import ArgumentParser
 
 parser = ArgumentParser()
 parser.add_argument('boot', type=int, help='if the current node is the bootstrap enter 1, oterwise enter 0')
@@ -27,29 +24,59 @@ parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 port = args.port
 
+global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
-
 #.......................................................................................
-some_id = 0
+
+#source : https://networklore.com/start-task-with-flask/
+def registernode():
+	def start_register():
+		done = False
+		global new_node
+		while(not done):
+			print("Trying to register new node")
+			try:
+				#new_node = node.node(0,args.ip,args.port)
+				r = new_node.register(args.boot)
+				if r.status_code == 200:
+					print("New node registered!")
+					done = True
+				print("Status Code:",r.status_code)
+			except:
+				print("Coudn't register new node")
+			time.sleep(3)
+
+	thread = threading.Thread(target=start_register)
+	thread.start()
+    
+
+@app.route('/node_info', methods=['GET'])
+def info():
+    global new_node
+    print("ID:", new_node.id)
+    print("Ring:",new_node.ring)
+    response = {'transactions': 1}
+    return jsonify(response), 200
 
 
 # get all transactions in the blockchain
 
 @app.route('/transactions/get', methods=['GET'])
 def get_transactions():
+    global new_node
     #transactions = blockchain.transactions
     #wall=wallet.wallet()
     #print (type(wall.public_key))
     #bl = block.Block(1,2,[])
     #print (bl.nonce)
-    new_node = node.node(0,"192.168.1.4",5001)
     #print(nd.node_info)
     response = {'transactions': 1}
     return jsonify(response), 200
 
 @app.route('/register', methods=['POST'])
 def register_node():
+	global new_node
 	public_key = request.form["public_key"]
 	ip = request.form["ip"]
 	port = request.form["port"]
@@ -60,14 +87,15 @@ def register_node():
 
 @app.route('/get_id', methods=['POST'])
 def get_id():
-	new_node.id = request.form["id"]
-
+	global new_node
+	new_node.id = request.form["id"] 
+	print("New node got ID =", request.form["id"])
 	response = {'t': 1}
 	return jsonify(response), 200
 
 # run it once fore every node
 
 if __name__ == '__main__':
-	
-	app.run(port=port)
-	
+	if args.boot == 0 :
+		registernode()
+	app.run(host=args.ip,port=port)	

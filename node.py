@@ -8,38 +8,52 @@ import time
 
 class node:
 	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
+		
+		print("Initializing Node")
+	
 		#self.NBC=0;#eixe 100 alla to theloume se transaction
 		##set
 
 		#self.chain
-		
-		#self.id = 0 #bootstrap
+		self.id = 0	
+			
 		#self.NBCs
+		
 		self.wallet = wallet.wallet()
+		self.ip = ip
+		self.port = port
+
 		bootstrap_ip = "192.168.1.1"
 		bootstrap_port = 5000
 		#here we store information for every node, as its id, ...
 		#...its address (ip:port) its public key and its balance 
 		
-		boot_info = "0"+bootstrap_ip+":"+str(bootstrap_port)+str(self.wallet.public_key, 'utf-8')
+		boot_info = {}
+		boot_info["address"] = bootstrap_ip+":"+str(bootstrap_port)
+		boot_info["id"]=self.id
+		boot_info["key"] = str(self.wallet.public_key, 'utf-8')
 		self.ring = []
 		# all nodes know the ip:port of bootstrap node 
 		self.ring.append(boot_info)
-		print("start node")
+		
 
 		# every node when first created 
 		# sends its ip/port to bootstrap
+		
+	def register(self,is_bootstrap):
 		if (is_bootstrap==0):
+			bootstrap_ip = "http://192.168.1.1"
+			bootstrap_port = 5000
 			data = {}
 			data["public_key"] = self.wallet.public_key
-			data["ip"] = ip
-			data["port"] = port
+			data["ip"] = self.ip
+			data["port"] = self.port
 			#data = json.dumps(data)
-			url = "http://127.0.0.1"+":"+str(bootstrap_port)+"/register"
-			print("visit node is posting...")
+			url = bootstrap_ip+":"+str(bootstrap_port)+"/register"
+			print("New node posting key,ip,port to bootstrap")
 			r = requests.post(url,data)
 			#print ("data to post:", r.text)
-
+		return r
 
 	def create_new_block(self, is_bootstrap):
 		if is_bootstrap :
@@ -62,18 +76,21 @@ class node:
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
 		#add this node to the ring, only the bootstrap node can add a node to the ring after checking his wallet and ip:port address
 		#bottstrap node informs all other nodes and gives the request node an id and 100 NBCs
-		print("in here ?")
+		print("Bootstrap registering new node to ring")
 		if is_bootstrap :
 			id_to_give = len(self.ring)
-			node_info = str(id_to_give)+ip+":"+str(port)+str(self.wallet.public_key, 'utf-8')
+			node_info = {}
+			node_info["id"] = id_to_give
+			node_info["address"] = ip+":"+str(port)
+			node_info["key"] = str(self.wallet.public_key, 'utf-8')
 			self.ring.append(node_info)
 			data = {}
 			data["id"] = id_to_give
-			#ip, port 
-			print("boot is registering the guest node!")
-			url = "http://127.0.0.1"+":"+str(port)+"/get_id"
-			time.sleep(5)
+			print("Bootstrap posting id to new node")
+			#ip,port
+			url = "http://"+ip+":"+str(port)+"/get_id"
 			r = requests.post(url,data)
+		
 			
 
 	def create_transaction(self, receiver, amount):
