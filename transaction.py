@@ -7,6 +7,7 @@ import Crypto.Random
 from Crypto.Hash import SHA
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
+import hashlib
 
 import requests
 from flask import Flask, jsonify, request, render_template
@@ -27,17 +28,17 @@ class Transaction:
         #self.transaction_id = #: το hash του transaction
         #self.transaction_inputs #: λίστα από Transaction Input 
         #self.transaction_outputs: λίστα από Transaction Output 
-        #self.Signature
+        #self.signature = sender_private_key
 
-
+        self.transaction_id = hashlib.sha256("something here".encode()).hexdigest()
     
 
 
     #def to_dict(self):
         
 
-    #def sign_transaction(self):
+    def sign_transaction(self,sender_public_key,sender_private_key):
         """
         Sign transaction with private key
         """
-       
+        

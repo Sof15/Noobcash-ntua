@@ -4,6 +4,7 @@ import transaction
 import requests
 import json
 import time 
+import hashlib
 #from flask_socketio import SocketIO
 
 
@@ -50,23 +51,22 @@ class node:
 			data["public_key"] = self.wallet.public_key
 			data["ip"] = self.ip
 			data["port"] = self.port
-			#data = json.dumps(data)
 			url = bootstrap_ip+":"+str(bootstrap_port)+"/register"
-			print("New node posting key,ip,port to bootstrap")
+			print("New node posting key,ip,port to Bootstrap")
 			r = requests.post(url,data)
 			#print ("data to post:", r.text)
 		return r
 
-	def create_new_block(self, is_bootstrap):
+	def create_new_block(self, is_bootstrap,difficulty_bits):
 		if is_bootstrap :
-			nonce = 0
-			my_hash = 1
+			idx = 0
+			previous_hash = 1
 			sender = str.encode("0")
 			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
 			#edo isos na min einai sostos o tropos pou dimiourfoume to transaction
 			first_trans = transaction.Transaction(sender, sender, self.wallet.public_key, 100*5)
 			trans = [first_trans]
-			block_new = block.Block(nonce, my_hash, trans)
+			block_new = block.Block(idx, previous_hash, trans,difficulty_bits)
 		return block_new 
 
 	#def create_wallet():
@@ -76,7 +76,7 @@ class node:
 
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
 		#add this node to the ring, only the bootstrap node can add a node to the ring after checking his wallet and ip:port address
-		#bottstrap node informs all other nodes and gives the request node an id and 100 NBCs
+		#bootstrap node informs all other nodes and gives the request node an id and 100 NBCs
 		print("Bootstrap registering new node to ring")
 		if is_bootstrap :
 			id_to_give = len(self.ring)
@@ -87,9 +87,8 @@ class node:
 			self.ring.append(node_info)
 			data = {}
 			data["id"] = id_to_give
-			print("Bootstrap posting id to new node")
 			url = "http://"+ip+":"+str(port)+"/get_id"
-			print("URL:", url)
+			print("Bootstrap posting id to new node at URL:",url)
 			r = requests.post(url,data)
 
 			if (len(self.ring)==5):
@@ -107,7 +106,7 @@ class node:
 	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
 		#signature = PKCS1_v1_5.new(self.wallet.private_key)
-		trans = transaction.Transaction(self.wallet.public_key, (self.wallet).private_key, receiver, amount)
+		trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, receiver, amount)
 		return (trans)
 
 
@@ -115,7 +114,7 @@ class node:
 	#def broadcast_transaction():
 
 	
-	#def validdate_transaction():
+	#def validate_transaction():
 		#use of signature and NBCs balance
 
 
@@ -124,8 +123,23 @@ class node:
 
 
 
-	#def mine_block():
+	def mine_block(self,block,difficulty_bits):
+		#nonce is a 32-bit number appended to the header. the whole string is being hashed repeatedly until
+		#the hash result starts with difficulty number of zeros
+		#header of block without nonce
+		header = str(block.idx) + str(block.previousHash) + block.hashmerkleroot[0] + str(block.timestamp) + str(difficulty)
+		target = 2 ** (256-difficulty_bits) #number of leading zeros in bits!
+		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
+		for nonce in range(2**32):
+			hash_result = hashlib.sha256(str(header).encode()+str(nonce).encode()).hexdigest()
 
+			if np.long(hash_result,16) < target : 
+				print ("Success with nonce",nonce)
+				print ("Hash is",hash_result)
+				return (hash_result, nonce)
+
+		print ("Failed after",2**32-1," tries")
+		return nonce
 
 
 	#def broadcast_block():

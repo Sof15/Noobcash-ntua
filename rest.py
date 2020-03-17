@@ -22,11 +22,13 @@ parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
+difficulty_bits = 4 #5
+
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
-	new_node.create_new_block(args.boot)
+	new_node.create_new_block(args.boot,difficulty_bits)
 
 #.......................................................................................
 logger = logging.getLogger("lal")
@@ -36,7 +38,7 @@ def registernode():
 		done = False
 		global new_node
 		while(not done):
-			print("Trying to register new node")
+			print("Registering new node...")
 			try:
 				r = new_node.register(args.boot)
 				if r.status_code == 200:
@@ -45,7 +47,6 @@ def registernode():
 				print("Status Code:",r.status_code)
 			except Exception as e:
 				logger.error('Failed: '+ str(e))
-				print("Coudn't register new node")
 			time.sleep(3)
 
 	thread = threading.Thread(target=start_register)
@@ -55,9 +56,7 @@ def registernode():
 @app.route('/node_info', methods=['GET'])
 def info():
     global new_node
-    print("ID:", new_node.id)
-    print("Ring:",new_node.ring)
-    response = {'transactions': 1}
+    response = {'ID': new_node.id,"Ring:":new_node.ring}
     return jsonify(response), 200
 
 
