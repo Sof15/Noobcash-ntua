@@ -9,7 +9,6 @@ import wallet
 #import transaction
 import time
 import threading
-from flask_socketio import SocketIO
 import logging 
 
 
@@ -22,10 +21,12 @@ parser.add_argument('boot', type=int, help='if the current node is the bootstrap
 parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
-#port = args.port
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
+
+if args.boot:
+	new_node.create_new_block(args.boot)
 
 #.......................................................................................
 logger = logging.getLogger("lal")
@@ -37,7 +38,6 @@ def registernode():
 		while(not done):
 			print("Trying to register new node")
 			try:
-				#new_node = node.node(0,args.ip,args.port)
 				r = new_node.register(args.boot)
 				if r.status_code == 200:
 					print("New node registered!")
@@ -77,7 +77,7 @@ def get_transactions():
 
 @app.route('/register', methods=['POST'])
 def register_node():
-	print("boot node took the post data...")
+	print("Bootstrap got the new node's posted data...")
 	global new_node
 	public_key = request.form["public_key"]
 	ip = request.form["ip"]
@@ -98,17 +98,15 @@ def get_id():
 
 @app.route('/broadcast/ring', methods=['POST'])
 def get_ring():
-	print("reply to broadcasting....")
+	print("Getting ring from broadcasting....")
 	global new_node
-	#new_node.ring = []
-	#for i in range(5):
-	#	print("lalallal....", request.form[i])
-	#	new_node.ring.append(request.form[i])
-	#new_node.ring = request.form[0]
-	print("New node got ring =", request.form["net"][0])
-	'''print("New node got ring =", request.form[2])
-				print("New node got ring =", request.form[3])
-				print("New node got ring =", request.form[4])'''
+	new_node.ring = []
+	for i in range(5):
+		data = {}
+		for k in ['id','address','key']:
+			data[k] = request.form.get(key = "{}{}".format(k,i))
+		new_node.ring.append(data)
+	print("New node got ring =",new_node.ring)
 	response = {'t': 1}
 	return jsonify(response), 200
 

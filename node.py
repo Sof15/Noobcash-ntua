@@ -62,9 +62,8 @@ class node:
 			nonce = 0
 			my_hash = 1
 			sender = str.encode("0")
-
 			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
-			#edo isos na min einai sostos o tropos pou dimiourfoume to transactio
+			#edo isos na min einai sostos o tropos pou dimiourfoume to transaction
 			first_trans = transaction.Transaction(sender, sender, self.wallet.public_key, 100*5)
 			trans = [first_trans]
 			block_new = block.Block(nonce, my_hash, trans)
@@ -89,18 +88,18 @@ class node:
 			data = {}
 			data["id"] = id_to_give
 			print("Bootstrap posting id to new node")
-			#ip,port
 			url = "http://"+ip+":"+str(port)+"/get_id"
 			print("URL:", url)
 			r = requests.post(url,data)
 
 			if (len(self.ring)==5):
-				#time.sleep(5)
 				for i in range(1,5):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
 					print("broadcasting....")
-					#print(self.ring)
-					data = {'net':self.ring}
+					data = {}
+					for i in range(5):
+						for k in ['id','address','key']:
+							data["{}{}".format(k,i)] = self.ring[i][k]
 					r = requests.post(url,data)
 		
 			
