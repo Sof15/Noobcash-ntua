@@ -4,6 +4,7 @@ import transaction
 import requests
 import json
 import time 
+#from flask_socketio import SocketIO
 
 
 class node:
@@ -43,6 +44,7 @@ class node:
 	def register(self,is_bootstrap):
 		if (is_bootstrap==0):
 			bootstrap_ip = "http://192.168.1.1"
+			bootstrap_ip = "http://127.0.0.1"
 			bootstrap_port = 5000
 			data = {}
 			data["public_key"] = self.wallet.public_key
@@ -89,7 +91,17 @@ class node:
 			print("Bootstrap posting id to new node")
 			#ip,port
 			url = "http://"+ip+":"+str(port)+"/get_id"
+			print("URL:", url)
 			r = requests.post(url,data)
+
+			if (len(self.ring)==5):
+				#time.sleep(5)
+				for i in range(1,5):
+					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
+					print("broadcasting....")
+					#print(self.ring)
+					data = {'net':self.ring}
+					r = requests.post(url,data)
 		
 			
 
@@ -99,12 +111,11 @@ class node:
 		trans = transaction.Transaction(self.wallet.public_key, (self.wallet).private_key, receiver, amount)
 		return (trans)
 
+
+
 	#def broadcast_transaction():
 
-
-
-
-
+	
 	#def validdate_transaction():
 		#use of signature and NBCs balance
 

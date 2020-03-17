@@ -9,8 +9,8 @@ import wallet
 #import transaction
 import time
 import threading
-
-
+from flask_socketio import SocketIO
+import logging 
 
 
 app = Flask(__name__)
@@ -22,13 +22,13 @@ parser.add_argument('boot', type=int, help='if the current node is the bootstrap
 parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
-port = args.port
+#port = args.port
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 #.......................................................................................
-
+logger = logging.getLogger("lal")
 #source : https://networklore.com/start-task-with-flask/
 def registernode():
 	def start_register():
@@ -43,7 +43,8 @@ def registernode():
 					print("New node registered!")
 					done = True
 				print("Status Code:",r.status_code)
-			except:
+			except Exception as e:
+				logger.error('Failed: '+ str(e))
 				print("Coudn't register new node")
 			time.sleep(3)
 
@@ -76,13 +77,14 @@ def get_transactions():
 
 @app.route('/register', methods=['POST'])
 def register_node():
+	print("boot node took the post data...")
 	global new_node
 	public_key = request.form["public_key"]
 	ip = request.form["ip"]
 	port = request.form["port"]
 	new_node.register_node_to_ring(args.boot,ip,port,public_key)
 	response = {'t': 1}
-	print("boot node took the post data...")
+	
 	return jsonify(response), 200
 
 @app.route('/get_id', methods=['POST'])
@@ -93,9 +95,26 @@ def get_id():
 	response = {'t': 1}
 	return jsonify(response), 200
 
+
+@app.route('/broadcast/ring', methods=['POST'])
+def get_ring():
+	print("reply to broadcasting....")
+	global new_node
+	#new_node.ring = []
+	#for i in range(5):
+	#	print("lalallal....", request.form[i])
+	#	new_node.ring.append(request.form[i])
+	#new_node.ring = request.form[0]
+	print("New node got ring =", request.form["net"][0])
+	'''print("New node got ring =", request.form[2])
+				print("New node got ring =", request.form[3])
+				print("New node got ring =", request.form[4])'''
+	response = {'t': 1}
+	return jsonify(response), 200
+
 # run it once fore every node
 
 if __name__ == '__main__':
 	if args.boot == 0 :
 		registernode()
-	app.run(host=args.ip,port=port)	
+	app.run(host=args.ip,port=args.port)	
