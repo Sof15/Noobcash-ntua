@@ -6,7 +6,7 @@ import block
 import node
 #import blockchain
 import wallet
-#import transaction
+import transaction
 import time
 import threading
 import logging 
@@ -28,10 +28,12 @@ global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
-	new_node.create_new_block(args.boot,difficulty_bits)
+	genesis_block = new_node.create_new_block(args.boot,difficulty_bits)
 
 #.......................................................................................
+
 logger = logging.getLogger("lal")
+
 #source : https://networklore.com/start-task-with-flask/
 def registernode():
 	def start_register():

@@ -49,7 +49,7 @@ class Block:
 			#make sure it's a complete binary tree
 			if (len(self.hashmerkleroot) % 2 != 0) :
 				self.hashmerkleroot.append(self.hashmerkleroot[-1])
-			j = 0;
+			j = 0
 			for i in range(0, len(self.hashmerkleroot) - 1,2) :
 				self.hashmerkleroot[j] = hashlib.sha256(str(self.hashmerkleroot[i] + self.hashmerkleroot[i+1]).encode()).hexdigest()
 				j += 1
