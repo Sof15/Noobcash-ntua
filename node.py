@@ -95,7 +95,7 @@ class node:
 			if (len(self.ring)==5):
 				for i in range(1,5):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
-					print("broadcasting....")
+					print("Broadcasting ring....")
 					data = {}
 					for i in range(5):
 						for k in ['id','address','key']:
@@ -107,17 +107,24 @@ class node:
 	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
 		trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, receiver, amount)
+		print("Broadcasting transaction...")
+		self.broadcast_transaction(trans)
 		return (trans)
 
 
 
-	#def broadcast_transaction():
+	def broadcast_transaction(self,transaction):
+		data = trans.to_dict()
+		for i in range(len(self.ring)):
+			if i != self.id:
+				url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
+				r = requests.post(url,data)
 
-	
+
 
 	def verify_signature(self,sender_public_key,signature):
 		key = RSA.importKey(sender_public_key)
-		h = SHA256.new('To be signed'.encode())  #message is optional
+		h = SHA256.new('To be signed'.encode())  #isos to hash edo??
 		verifier = PKCS1_v1_5.new(key)
 		if verifier.verify(h,signature):
 			return 1
@@ -149,7 +156,7 @@ class node:
 		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot[0] + str(block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
 		for nonce in range(2**32):
-			hash_result = hashlib.sha256(str(header).encode()+str(nonce).encode()).hexdigest()
+			hash_result = hashlib.sha256((header+str(nonce)).encode()).hexdigest()
 			if self.valid_proof(hash_result,difficulty_bits):
 				print ("Success with nonce",nonce)
 				print ("Hash is",hash_result)

@@ -6,7 +6,7 @@ import block
 import node
 #import blockchain
 import wallet
-import transaction
+#import transaction
 import time
 import threading
 import logging 
@@ -23,17 +23,16 @@ parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
 difficulty_bits = 4 #5
+capacity = 1	#5,10
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
-	genesis_block = new_node.create_new_block(args.boot,difficulty_bits)
+	new_block = new_node.create_new_block(args.boot,difficulty_bits)
 
 #.......................................................................................
-
 logger = logging.getLogger("lal")
-
 #source : https://networklore.com/start-task-with-flask/
 def registernode():
 	def start_register():
@@ -107,6 +106,22 @@ def get_ring():
 		for k in ['id','address','key']:
 			data[k] = request.form.get(key = "{}{}".format(k,i))
 		new_node.ring.append(data)
+	print("New node got ring =",new_node.ring)
+	response = {'t': 1}
+	return jsonify(response), 200
+
+@app.route('/broadcast/transaction', methods=['POST'])
+def get_new_transaction():
+	print("Getting transaction from broadcasting....")
+	global new_node
+	request.form["sender_address"]
+    request.form["receiver_address"]
+    request.form["amount"]
+    request.form["hash"]
+    request.form["signature"]
+    #create new transaction??
+    if new_node.validate_transaction(new_tx):
+    	new_node.add_transaction_to_block()
 	print("New node got ring =",new_node.ring)
 	response = {'t': 1}
 	return jsonify(response), 200

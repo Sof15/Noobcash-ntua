@@ -43,7 +43,7 @@ class Transaction:
         Sign transaction with private key
         '''
         
-        h = SHA256.new('To be signed'.encode()) #message is optional
+        h = SHA256.new('To be signed'.encode()) #isos to hash edo??
         key = RSA.importKey(sender_private_key)
         signer = PKCS1_v1_5.new(key)
         signature = signer.sign(h)
