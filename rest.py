@@ -83,6 +83,7 @@ def register_node():
 	ip = request.form["ip"]
 	port = request.form["port"]
 	new_node.register_node_to_ring(args.boot,ip,port,public_key)
+	#edo na steiloyme kai to blockchain
 	response = {'t': 1}
 	
 	return jsonify(response), 200
@@ -114,15 +115,27 @@ def get_ring():
 def get_new_transaction():
 	print("Getting transaction from broadcasting....")
 	global new_node
-	request.form["sender_address"]
-    request.form["receiver_address"]
-    request.form["amount"]
-    request.form["hash"]
-    request.form["signature"]
-    #create new transaction??
-    if new_node.validate_transaction(new_tx):
-    	new_node.add_transaction_to_block()
-	print("New node got ring =",new_node.ring)
+	new_tx = transaction.Transaction(request.form["sender_address"],None,request.form["receiver_address"],request.form["amount"])
+	new_tx.signature = request.form["signature"]
+	new_tx.transaction_id = request.form["hash"]
+	if new_node.validate_transaction(new_tx):
+		new_node.add_transaction_to_block(block,new_tx,capacity,difficulty_bits) #blockchain??)
+	print("Added broadcasted transaction to block!")
+	response = {'t': 1}
+	return jsonify(response), 200
+
+
+@app.route('/broadcast/block', methods=['POST'])
+def get_block():
+	print("Getting validated block from broadcasting....")
+	global new_node
+	#first create a block then update it's data 
+	new_block = block.Block(request.form["index"], request.form["previousHash"], request.form["listOfTransactions"],difficulty_bits)
+	new_block.hash = request.form["hash"]
+	new_block.nonce = request.form["nonce"]
+	new_block.timestamp = request.form["timestamp"]
+	new_block.hashmerkleroot = request.form["hashmerkleroot"] 
+	print("Got validated block")
 	response = {'t': 1}
 	return jsonify(response), 200
 

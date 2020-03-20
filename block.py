@@ -14,8 +14,6 @@ class Block:
 		self.previousHash = prev_hash  #hash of the previous block header
 		self.timestamp = datetime.timestamp(datetime.now())
 		
-		#self.nonce = None
-
 		#if idx == 0:
 		self.nonce = 0
 		#else: 

@@ -17,9 +17,8 @@ class node:
 	
 		#self.NBC=0;#eixe 100 alla to theloume se transaction
 
-		#self.chain
 		self.id = 0	
-			
+		#self.chain = blockchain.Blockchain()	
 		#self.NBCs
 		
 		self.wallet = wallet.wallet()
@@ -70,9 +69,9 @@ class node:
 			block_new = block.Block(idx, previous_hash, trans,difficulty_bits)
 		return block_new 
 
-	#def create_wallet():
+	#def create_wallet(self):		#DE XREIAZETAI THARRW
 		#create a wallet for this node, with a public key and a private key
-		#DE XREIAZETAI THARRW
+		#return wallet.wallet()
 		
 
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
@@ -141,6 +140,7 @@ class node:
 		
 		block.listOfTransactions.append(tx)
 		block.hashmerkleroot = block.MerkleRoot()
+		block.hash = block.myHash(difficulty_bits)
 		if len(block.listOfTransactions) == capacity:
 			hash_result,nonce = self.mine_block(block,difficulty_bits)
 			if hash_result != 0:
@@ -160,14 +160,28 @@ class node:
 			if self.valid_proof(hash_result,difficulty_bits):
 				print ("Success with nonce",nonce)
 				print ("Hash is",hash_result)
+				block.hash = hash_result
+				block.nonce = nonce
+				self.broadcast_block(block)
 				return hash_result, nonce
 
 		print ("Failed after",2**32-1," tries")
 		return 0,0
 
 
-	#def broadcast_block():
-
+	def broadcast_block(self,block):
+		data = {}
+		data["index"] = block.index
+		data["previousHash"] = block.previousHash
+		data["hash"] = block.hash
+		data["nonce"] = block.nonce
+		data["hashmerkleroot"] = block.hashmerkleroot
+		data["timestamp"] = block.timestamp
+		#data["listOfTransactions"] = block.listOfTransactions auto na kanoyme
+		for i in range(len(self.ring)):
+			if i != self.id:
+				url = "http://" + self.ring[i]["address"] + "/broadcast/block"
+				r = requests.post(url,data)
 
 		
 
@@ -179,9 +193,19 @@ class node:
 		return 0
 
 
+	def validate_block(self,block,blockchain,difficulty_bits):
+		#validate every new block except for genesis block
+		if block.index != 0:
+			header = str(block.index) + str(block.previousHash) + block.hashmerkleroot[0] + str(block.timestamp) + str(difficulty_bits) #+ str(block.nonce)
+			h = SHA256.new(header.encode()).hexdigest()
+			if block.hash == h and block.previousHash == blockchain.blocks[block.index-1].hash:
+				return 1
+			return 0
+		return 1
+
 	#concencus functions
 
-	#def valid_chain(self, chain):
+	#def validate_chain(self, chain):
 		#check for the longer chain accroose all nodes
 
 
