@@ -21,9 +21,10 @@ class wallet:
 		key = RSA.generate(2048, e=65537)
 		self.public_key = key.publickey().exportKey("PEM")
 		self.private_key = key.exportKey("PEM") 
-
+		
 		#self_address
 		#self.transactions
 
-	#def balance():
+
+
 

@@ -8,6 +8,7 @@ import hashlib
 from Crypto.Hash import SHA,SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
+from Crypto.Random import random
 import numpy as np
 
 class node:
@@ -24,6 +25,7 @@ class node:
 		self.wallet = wallet.wallet()
 		self.ip = ip
 		self.port = port
+		self.utxo = []
 
 		bootstrap_ip = "192.168.1.1"
 		bootstrap_port = 5000
@@ -34,6 +36,7 @@ class node:
 		boot_info["address"] = bootstrap_ip+":"+str(bootstrap_port)
 		boot_info["id"]=self.id
 		boot_info["key"] = str(self.wallet.public_key, 'utf-8')
+		
 		self.ring = []
 		# all nodes know the ip:port of bootstrap node 
 		self.ring.append(boot_info)
@@ -57,17 +60,25 @@ class node:
 			#print ("data to post:", r.text)
 		return r
 
-	def create_new_block(self, is_bootstrap,difficulty_bits):
-		if is_bootstrap :
+	def create_genesis_block(self):
+		if self.id==0 :
 			idx = 0
 			previous_hash = 1
 			sender = "0".encode()
 			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
 			#edo isos na min einai sostos o tropos pou dimiourgoume to transaction
 			first_trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*5)
+			rand_id = random.get_random_bytes(48) # str() hexdigest() kati apo ayta
+			first_utxo = {'id': rand_id,'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key} # isos thelei public key anti gia id 
+			self.utxoa.append(first_utxo)
 			trans = [first_trans]
 			block_new = block.Block(idx, previous_hash, trans,difficulty_bits)
-		return block_new 
+		else:
+			print("error")
+		return block_new
+
+	def create_new_block(self, is_bootstrap,difficulty_bits):
+		 pass
 
 	#def create_wallet(self):		#DE XREIAZETAI THARRW
 		#create a wallet for this node, with a public key and a private key
@@ -84,6 +95,7 @@ class node:
 			node_info["id"] = id_to_give
 			node_info["address"] = ip+":"+str(port)
 			node_info["key"] = str(self.wallet.public_key, 'utf-8')
+			node_info["utxo"] = []
 			self.ring.append(node_info)
 			data = {}
 			data["id"] = id_to_give
@@ -97,7 +109,7 @@ class node:
 					print("Broadcasting ring....")
 					data = {}
 					for i in range(5):
-						for k in ['id','address','key']:
+						for k in ['id','address','key', 'utxo']:
 							data["{}{}".format(k,i)] = self.ring[i][k]
 					r = requests.post(url,data)
 		
@@ -105,7 +117,15 @@ class node:
 
 	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
-		trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, receiver, amount)
+		trans_in = []
+		total = 0 
+		for utxo in self.utxo:
+			while(total < amount):
+				if(utxo["recipient"]==self.wallet.public_key):
+					total += utxo["amount"] 
+					trans_in.append(utxo)
+
+		trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
 		print("Broadcasting transaction...")
 		self.broadcast_transaction(trans)
 		return (trans)
@@ -131,10 +151,45 @@ class node:
 
 
 	def validate_transaction(self,tx):
-		#use of signature and NBCs balance
-		if self.verify_signature(tx.sender_address,tx.signature): # and check tx inputs/outputs for enough NBCs
+		# use of signature and NBCs balance
+		# and check tx inputs/outputs for enough NBCs
+		found = True
+		for utxo_in in tx.transaction_inputs:
+			if ((utxo_in["id"] not in [utxo["id"] for utxo in self.utxo]) or utxo_in["recipient"]!=tx.sender_address):
+				found = False
+				break
+		
+		# na kanoume kapou na elegxei an aytos poy telnei stelnei dika toy giouria kai oxi tou geitona
+		if self.verify_signature(tx.sender_address,tx.signature) and found :	
+			idx = []
+			temp = [(i,utxo["id"]) for i,utxo in enumerate(self.utxo)]
+			for utxo_in in tx.transaction_inputs:
+				for i,x in temp:
+					if x==utxo_in["id"]:
+						idx.append(i)
+
+			self.utxo = [self.utxo[x] for x in idx]	
+			change_utxo = {}
+			change_utxo["id"] = random.get_random_bytes(48) # str() hexdigest() kati apo ayta 
+			change_utxo["previous_trans_id"] = tx.transaction_id 
+			change_utxo["amount"] = self.balance(sender_address,self.utxo)-tx.amount
+			change_utxo["recipient"] = tx.sender_address
+			recipient_utxo = {}
+			recipient_utxo["id"] = random.get_random_bytes(48)
+			recipient_utxo["previous_trans_id"] = tx.transaction_id 
+			recipient_utxo["amount"] = tx.amount
+			recipient_utxo["recipient"] = self.wallet.public_key
+			self.utxo.append(change_utxo)
+			self.utxo.append(recipient_utxo)
 			return 1
 		return 0
+
+	def balance(recipient,utxo_list):
+		total = 0
+		for utxo in utxo_list:
+			if (utxo["recipient"]==recipient):
+				total += utxo["amount"]
+		return total
 
 	def add_transaction_to_block(self,block,tx,capacity,difficulty_bits): #blockchain??
 		
