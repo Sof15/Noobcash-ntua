@@ -8,8 +8,9 @@ import hashlib
 from Crypto.Hash import SHA,SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
-from Crypto.Random import random
+from Crypto import Random
 import numpy as np
+import uuid
 
 class node:
 	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
@@ -28,6 +29,7 @@ class node:
 		self.utxo = []
 
 		bootstrap_ip = "192.168.1.1"
+		bootstrap_ip = "127.0.0.1"
 		bootstrap_port = 5000
 		#here we store information for every node, as its id, ...
 		#...its address (ip:port) its public key and its balance 
@@ -60,22 +62,25 @@ class node:
 			#print ("data to post:", r.text)
 		return r
 
-	def create_genesis_block(self):
+	def create_genesis_block(self,difficulty):
 		if self.id==0 :
+			
 			idx = 0
 			previous_hash = 1
 			sender = "0".encode()
 			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
 			#edo isos na min einai sostos o tropos pou dimiourgoume to transaction
-			first_trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*5)
-			rand_id = random.get_random_bytes(48) # str() hexdigest() kati apo ayta
-			first_utxo = {'id': rand_id,'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key} # isos thelei public key anti gia id 
-			self.utxoa.append(first_utxo)
+			first_trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*5,[])
+			
+			rand_id = uuid.uuid1()
+			
+			first_utxo = {'id': rand_id.int, 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode("utf-8") } # isos thelei public key anti gia id 
+			self.utxo.append(first_utxo)
 			trans = [first_trans]
-			block_new = block.Block(idx, previous_hash, trans,difficulty_bits)
+			#block_new = block.Block(idx, previous_hash, trans,difficulty)
 		else:
 			print("error")
-		return block_new
+		#return block_new
 
 	def create_new_block(self, is_bootstrap,difficulty_bits):
 		 pass
@@ -90,6 +95,7 @@ class node:
 		#bootstrap node informs all other nodes and gives the request node an id and 100 NBCs
 		print("Bootstrap registering new node to ring")
 		if is_bootstrap :
+
 			id_to_give = len(self.ring)
 			node_info = {}
 			node_info["id"] = id_to_give
@@ -97,9 +103,16 @@ class node:
 			node_info["key"] = str(self.wallet.public_key, 'utf-8')
 			node_info["utxo"] = []
 			self.ring.append(node_info)
+				
 			data = {}
 			data["id"] = id_to_give
-			url = "http://"+ip+":"+str(port)+"/get_id"
+
+			
+			dumped = json.dumps(self.utxo)
+			print(dumped)
+			data["utxo"] = dumped
+			
+			url = "http://"+ip+":"+str(port)+"/data/get"
 			print("Bootstrap posting id to new node at URL:",url)
 			r = requests.post(url,data)
 
@@ -107,37 +120,42 @@ class node:
 				for i in range(1,5):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
 					print("Broadcasting ring....")
-					data = {}
-					for i in range(5):
-						for k in ['id','address','key', 'utxo']:
-							data["{}{}".format(k,i)] = self.ring[i][k]
+
+					dumped = json.dumps(self.ring)
+					data ={"ring":dumped}
+					
 					r = requests.post(url,data)
-		
-			
+
+	def send_initial_transaction(self, public_key):	
+		trans = self.create_transaction(public_key, 100)
+		print(trans.amount)		
 
 	def create_transaction(self, receiver, amount):
 		#remember to broadcast it
+	
 		trans_in = []
 		total = 0 
+		
+		print("amount=", amount, type(amount))
 		for utxo in self.utxo:
 			while(total < amount):
-				if(utxo["recipient"]==self.wallet.public_key):
+				print("....", utxo["recipient"], "\n ....", self.wallet.public_key)
+				if(utxo["recipient"]==self.wallet.public_key.decode("utf-8")):
 					total += utxo["amount"] 
 					trans_in.append(utxo)
-
-		trans = transaction.Transaction(self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
-		print("Broadcasting transaction...")
+					
+	
+		trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
+		print("Broadcasting transaction...")	
 		self.broadcast_transaction(trans)
 		return (trans)
 
 
-
 	def broadcast_transaction(self,transaction):
-		data = trans.to_dict()
+		data = transaction.to_dict()
 		for i in range(len(self.ring)):
-			if i != self.id:
-				url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
-				r = requests.post(url,data)
+			url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
+			r = requests.post(url,data)
 
 
 
@@ -182,6 +200,8 @@ class node:
 			self.utxo.append(change_utxo)
 			self.utxo.append(recipient_utxo)
 			return 1
+		else: 
+			print("no validated!")
 		return 0
 
 	def balance(recipient,utxo_list):

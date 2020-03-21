@@ -6,8 +6,9 @@ import block
 import node
 #import blockchain
 import wallet
-#import transaction
+import transaction
 import time
+import json
 import threading
 import logging 
 
@@ -29,7 +30,7 @@ global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
-	new_block = new_node.create_new_block(args.boot,difficulty_bits)
+	new_block = new_node.create_genesis_block(difficulty_bits)
 
 #.......................................................................................
 logger = logging.getLogger("lal")
@@ -88,12 +89,34 @@ def register_node():
 	
 	return jsonify(response), 200
 
-@app.route('/get_id', methods=['POST'])
-def get_id():
+@app.route('/data/get', methods=['POST'])
+def get_data():
+	
 	global new_node
-	new_node.id = request.form["id"] 
+	
+	new_node.id = request.form["id"]
+
+	temp_utxo = {}
+	'''temp_utxo["id"] = request.form["utxo_id"]
+				temp_utxo["recipient"] = request.form["recipient"]
+				temp_utxo["amount"] = request.form["amount"]
+				temp_utxo["previous_trans_id"] = request.form["previous_trans_id"]'''
+	temp_utxo = request.form["utxo"]
+	
+	new_node.utxo.append(temp_utxo)
+	
 	print("New node got ID =", request.form["id"])
+	url = "http://"+new_node.ring[0]["address"]+"/data/confirm" 
+	requests.post(url,{'data':"ok"})
 	response = {'t': 1}
+	return jsonify(response), 200
+
+@app.route('/data/confirm', methods=['POST'])
+def confirm():
+	global new_node
+	new_node.send_initial_transaction(new_node.wallet.public_key)
+	
+	response = request.form
 	return jsonify(response), 200
 
 
@@ -101,13 +124,8 @@ def get_id():
 def get_ring():
 	print("Getting ring from broadcasting....")
 	global new_node
-	new_node.ring = []
-	for i in range(5):
-		data = {}
-		for k in ['id','address','key']:
-			data[k] = request.form.get(key = "{}{}".format(k,i))
-		new_node.ring.append(data)
-	print("New node got ring =",new_node.ring)
+	new_node.ring = json.load(request.form["ring"])
+	print("New node got ring =", type(new_node.ring))
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -115,9 +133,14 @@ def get_ring():
 def get_new_transaction():
 	print("Getting transaction from broadcasting....")
 	global new_node
-	new_tx = transaction.Transaction(request.form["sender_address"],None,request.form["receiver_address"],request.form["amount"])
+	print("transaction....." , request.form)
+	new_tx = transaction.Transaction(request.form["sender_address"],None,request.form["receiver_address"],request.form["amount"],request.form["inputs"])
 	new_tx.signature = request.form["signature"]
 	new_tx.transaction_id = request.form["hash"]
+	new_tx.transaction_input = json.load(request.form["inputs"])
+	print(request.form["inputs"])
+	new_tx.transaction_output = request.form["outputs"]
+
 	if new_node.validate_transaction(new_tx):
 		new_node.add_transaction_to_block(block,new_tx,capacity,difficulty_bits) #blockchain??)
 	print("Added broadcasted transaction to block!")
