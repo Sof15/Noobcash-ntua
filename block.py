@@ -1,13 +1,11 @@
 
-#import blockchain
+import blockchain
 from datetime import datetime
 import Crypto.Random.random as rnd
 import hashlib
+import json
 
 class Block:
-	#otan kapoios dimiourgei to block theloume na vroume to index
-	#gia na ginei ayto theloume to megethos tou blockchain ara the prepei 
-	#na to dinei san parametro stin _init_
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
 		##set
 		self.index = idx
@@ -24,18 +22,28 @@ class Block:
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
 	
+	def to_dict(self):
+		data = {}
+		data["index"] = self.index
+		data["previousHash"] = self.previousHash
+		data["timestamp"] = self.timestamp
+		data["nonce"] = self.nonce
+		temp_list = []
+		for tx in self.listOfTransactions:
+			temp_list.append(tx.to_dict())
+		#print(temp_list)
+		data["listOfTransactions"] = json.dumps(temp_list)
+		data["hashmerkleroot"] = self.hashmerkleroot
+		data["hash"] = self.hash
+		return data
 
 	def myHash(self,difficulty_bits):
 		
-		header = str(self.index)+str(self.previousHash)+ self.hashmerkleroot[0] +str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
+		header = str(self.index)+str(self.previousHash)+ self.hashmerkleroot +str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
 		#calculate self.hash
 		hash_result = hashlib.sha256(header.encode()).hexdigest()
 		return hash_result
 
-
-	#def add_transaction(transaction transaction, blockchain blockchain):
-		#add a transaction to the block
-		#update merkleroot, hash
 
 	def MerkleRoot(self):
 		#calculate hash of merkle tree root
@@ -55,4 +63,4 @@ class Block:
 			delete_last = len(self.hashmerkleroot) - j
 			del self.hashmerkleroot[-delete_last:]
 
-		return self.hashmerkleroot
+		return self.hashmerkleroot[0]

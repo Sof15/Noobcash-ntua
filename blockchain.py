@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 import block
 import node
 import wallet
-#import transaction
+import transaction
 import time
 import threading
 import logging 
@@ -21,6 +21,8 @@ class Blockchain():
 		#add validated block to list
 		self.blocks.append(block)
 
-	def remove_block(Self,block):
-		#remove a block using its id??
-		self.blocks.pop(block.index)
+	def to_dict(self):
+		temp_list = []
+		for block in self.blocks:
+			temp_list.append(block.to_dict())
+		return temp_list
