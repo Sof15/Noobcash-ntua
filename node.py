@@ -72,7 +72,7 @@ class node:
 			
 			rand_id = uuid.uuid1()
 			
-			first_utxo = {'id': rand_id.int, 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
+			first_utxo = {'id': str(rand_id.int), 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
 			self.utxo.append(first_utxo)
 			trans = [first_trans]
 			block_new = block.Block(idx, previous_hash, trans,difficulty)
@@ -165,22 +165,24 @@ class node:
 			if ((utxo_in["id"] not in [utxo["id"] for utxo in self.utxo]) or utxo_in["recipient"]!=tx.sender_address.decode()):
 				found = False
 				break
-		
+
 		if self.verify_signature(tx.sender_address,tx.signature,tx.temp_id) and found :	
 			idx = []
 			temp = [(i,utxo["id"]) for i,utxo in enumerate(self.utxo)]
+
 			for utxo_in in tx.transaction_inputs:
 				for i,x in temp:
 					if x!=utxo_in["id"]:
 						idx.append(i)
 
+			# for the id concatenate transaction id with 0 if it's a change utxo otherwise with 1 
 			change_utxo = {}
-			change_utxo["id"] = uuid.uuid1().int
+			change_utxo["id"] = tx.transaction_id+"0"
 			change_utxo["previous_trans_id"] = tx.transaction_id
 			change_utxo["amount"] = self.balance(tx.sender_address,self.utxo)-tx.amount
 			change_utxo["recipient"] = tx.sender_address.decode()
 			recipient_utxo = {}
-			recipient_utxo["id"] = uuid.uuid1().int
+			recipient_utxo["id"] = tx.transaction_id+"1"
 			recipient_utxo["previous_trans_id"] = tx.transaction_id 
 			recipient_utxo["amount"] = tx.amount
 			recipient_utxo["recipient"] = tx.receiver_address.decode()#self.wallet.public_key.decode()
@@ -246,11 +248,15 @@ class node:
 
 
 	def broadcast_block(self,block):
+		print("call broadcast_block")
 		data = block.to_dict()
 		for i in range(len(self.ring)):
 			if i != self.id:
+
 				url = "http://" + self.ring[i]["address"] + "/broadcast/block"
+				print("url to broadcast block:",url)
 				r = requests.post(url,data)
+				print("post done")
 
 		
 
@@ -270,6 +276,7 @@ class node:
 			if block.hash == h and block.previousHash == self.chain.blocks[block.index-1].hash:
 				return 1
 			elif block.previousHash != self.chain.blocks[block.index-1].hash:
+				print("before resolv confiicts in vaidation block")
 				if self.resolve_conflicts():
 					return 1
 				else:
@@ -290,10 +297,16 @@ class node:
 		#resolve correct chain
 		chainlength = len(self.chain.blocks)
 		while(len(self.chain.blocks) == chainlength):
+			#print("here")
+			# to ring einai keno ... gt ??????? a nai pairnei to ring afou mpoun oloi. POVLIMA! 
 			for i in range(len(self.ring)):
+				print("here2")
 				if i != self.id:
+					print("here3")
 					data = {}
 					data["address"] = self.ring[self.id]["address"]
 					data["mylength"] = len(self.chain.blocks)
 					url = "http://" + self.ring[i]["address"] + "/blockchain/request"
 					r = requests.post(url,data)
+
+		return 1

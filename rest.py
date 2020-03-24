@@ -108,6 +108,7 @@ def get_data():
 		new_block.timestamp = data["timestamp"]
 		new_block.nonce = data["nonce"]
 		new_node.chain.add_block(new_block)
+
 	
 	if new_node.validate_chain(difficulty_bits):
 		print("New Node validated broadcasted Blockchain")
@@ -201,7 +202,9 @@ def get_block():
 		new_block.nonce = request.form["nonce"]
 		new_block.timestamp = request.form["timestamp"]
 		new_block.hashmerkleroot = request.form["hashmerkleroot"] 
+		print("before validation of block....")
 		if new_node.validate_block(new_block,difficulty_bits):
+			print("after validation of block....")
 			new_node.chain.add_block(new_block)
 			print("Added validated block to blockchain\n")
 		else:
