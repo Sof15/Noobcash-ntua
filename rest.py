@@ -15,7 +15,6 @@ import logging
 
 app = Flask(__name__)
 CORS(app)
-#chain = blockchain.Blockchain()
 
 parser = ArgumentParser()
 parser.add_argument('boot', type=int, help='if the current node is the bootstrap enter 1, oterwise enter 0')
@@ -24,14 +23,15 @@ parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
 difficulty_bits = 4 #5
-capacity = 1	#5,10
+capacity = 2	#5,10
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
 	genesis_block = new_node.create_genesis_block(difficulty_bits)
-	new_node.chain.add_block(genesis_block)
+	new_node.current_block = genesis_block
+	
 
 #.......................................................................................
 
@@ -44,6 +44,7 @@ def registernode():
 			print("New node being registered...")
 			try:
 				r = new_node.register(args.boot)
+				#print(new_node.chain.blocks)
 				if r.status_code == 200:
 					print("New node registered!\n")
 					done = True
@@ -85,7 +86,7 @@ def register_node():
 	ip = request.form["ip"]
 	port = request.form["port"]
 	new_node.register_node_to_ring(args.boot,ip,port,public_key.encode())
-	trans = new_node.create_transaction(new_node.ring[-1]["key"],100)
+	trans = new_node.create_transaction(new_node.ring[-1]["key"].encode(),100)
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -102,6 +103,7 @@ def get_data():
 			trans[-1].signature = tx["signature"].encode('latin-1')
 			trans[-1].hash = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
+			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
 		new_block.hashmerkleroot = data["hashmerkleroot"]
 		new_block.hash = data["hash"]
@@ -111,10 +113,25 @@ def get_data():
 
 	
 	if new_node.validate_chain(difficulty_bits):
-		print("New Node validated broadcasted Blockchain")
+		print("New Node validated broadcasted Blockchain\n")
 	
+	print("Creating current block...\n")
+	current_block = json.loads(request.form["current_block"])
+	trans = []
+	for tx in json.loads(current_block["listOfTransactions"]):
+		trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
+		trans[-1].signature = tx["signature"].encode('latin-1')
+		trans[-1].hash = tx["hash"]
+		trans[-1].outputs = json.loads(tx["outputs"])
+		trans[-1].temp_id = tx["temp_id"].encode('latin-1')
+	new_node.current_block = block.Block(int(current_block["index"]), current_block["previousHash"], trans,difficulty_bits)
+	new_node.current_block.hash = current_block["hash"]
+	new_node.current_block.nonce = current_block["nonce"]
+	new_node.current_block.timestamp = current_block["timestamp"]
+	new_node.current_block.hashmerkleroot = current_block["hashmerkleroot"] 
+
 	new_node.utxo.extend(json.loads(request.form["utxo"]))
-	print("New node got ID =", request.form["id"])
+	print("New node got ID =", request.form["id"],"\n")
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -144,6 +161,7 @@ def get_blockchain():
 			trans[-1].signature = tx["signature"].encode('latin-1')
 			trans[-1].hash = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
+			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
 		new_block.hashmerkleroot = data["hashmerkleroot"]
 		new_block.hash = data["hash"]
@@ -161,7 +179,7 @@ def get_ring():
 	print("Getting ring from broadcasting....\n")
 	global new_node
 	new_node.ring = json.loads(request.form["ring"])
-	print("New node got ring =", type(new_node.ring))
+	print("New node got ring!\n")
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -177,9 +195,9 @@ def get_new_transaction():
 	new_tx.transaction_outputs = json.loads(request.form["outputs"])
 	if new_node.validate_transaction(new_tx):
 		new_node.add_transaction_to_block(new_tx,capacity,difficulty_bits)
-		print("Added broadcasted transaction to block!\n")
+		print("Added broadcasted transaction to current block!\n")
 	else:
-		print("Could not add transaction to block.\n")
+		print("Could not add transaction to current block.\n")
 	for i in range(len(new_node.utxo)):
 		print(new_node.utxo[i]["amount"])
 	response = {'t': 1}
@@ -190,23 +208,28 @@ def get_new_transaction():
 def get_block():
 	print("Getting block from broadcasting....\n")
 	global new_node
-	if request.form["index"] not in [block.index for block in new_node.chain.blocks]:
+	#adding the first of the broadcasted blocks to blockchain after validating
+	if int(request.form["index"]) not in [b.index for b in new_node.chain.blocks]:
 		trans = []
 		for tx in json.loads(request.form["listOfTransactions"]):
 			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
 			trans[-1].signature = tx["signature"].encode('latin-1')
 			trans[-1].hash = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
+			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(int(request.form["index"]), request.form["previousHash"], trans,difficulty_bits)
 		new_block.hash = request.form["hash"]
 		new_block.nonce = request.form["nonce"]
 		new_block.timestamp = request.form["timestamp"]
 		new_block.hashmerkleroot = request.form["hashmerkleroot"] 
-		print("before validation of block....")
+		print("Validating broadcasted block...")
 		if new_node.validate_block(new_block,difficulty_bits):
-			print("after validation of block....")
 			new_node.chain.add_block(new_block)
 			print("Added validated block to blockchain\n")
+			for b in new_node.chain.blocks:
+				print("........................")
+				for tx in b.listOfTransactions:
+					print(tx.amount)
 		else:
 			print("Unable to validate broadcasted block.\n")
 	else:

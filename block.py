@@ -2,22 +2,15 @@
 import blockchain
 from datetime import datetime
 import Crypto.Random.random as rnd
-import hashlib
+from Crypto.Hash import SHA,SHA256
 import json
 
 class Block:
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
-		##set
 		self.index = idx
 		self.previousHash = prev_hash  #hash of the previous block header
 		self.timestamp = datetime.timestamp(datetime.now())
-		
-		#if idx == 0:
 		self.nonce = 0
-		#else: 
-		#	self.nonce = int(str(rnd.getrandbits(32)) + str(int(self.timestamp)))
-		#print("nonce=",self.nonce)
-
 		self.listOfTransactions = list_trans
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
@@ -38,10 +31,9 @@ class Block:
 		return data
 
 	def myHash(self,difficulty_bits):
-		
-		header = str(self.index)+str(self.previousHash)+ self.hashmerkleroot +str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
 		#calculate self.hash
-		hash_result = hashlib.sha256(header.encode()).hexdigest()
+		header = str(self.index)+str(self.previousHash)+ self.hashmerkleroot +str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
+		hash_result = SHA256.new(header.encode()).hexdigest()
 		return hash_result
 
 
@@ -57,7 +49,7 @@ class Block:
 				self.hashmerkleroot.append(self.hashmerkleroot[-1])
 			j = 0
 			for i in range(0, len(self.hashmerkleroot) - 1,2) :
-				self.hashmerkleroot[j] = hashlib.sha256(str(self.hashmerkleroot[i] + self.hashmerkleroot[i+1]).encode()).hexdigest()
+				self.hashmerkleroot[j] = SHA256.new(str(self.hashmerkleroot[i] + self.hashmerkleroot[i+1]).encode()).hexdigest()
 				j += 1
 
 			delete_last = len(self.hashmerkleroot) - j

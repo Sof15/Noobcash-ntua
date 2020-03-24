@@ -22,21 +22,19 @@ class node:
 
 		self.id = 0	
 		self.chain = blockchain.Blockchain()
-		#self.NBCs
-		
 		self.wallet = wallet.wallet()
 		self.ip = ip
 		self.port = port
 		self.utxo = []
 		self.ring = []
-
+		self.current_block = None 
 		#here we store information for every node, as its id, ...
 		#...its address (ip:port) its public key and its balance 
 		if is_bootstrap:
 			boot_info = {}
 			boot_info["address"] = ip+":"+str(port)
 			boot_info["id"]=self.id
-			boot_info["key"] = self.wallet.public_key
+			boot_info["key"] = self.wallet.public_key.decode()
 			
 			# all nodes know the ip:port of bootstrap node 
 			self.ring.append(boot_info)
@@ -72,7 +70,7 @@ class node:
 			
 			rand_id = uuid.uuid1()
 			
-			first_utxo = {'id': str(rand_id.int), 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
+			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
 			self.utxo.append(first_utxo)
 			trans = [first_trans]
 			block_new = block.Block(idx, previous_hash, trans,difficulty)
@@ -94,16 +92,18 @@ class node:
 			node_info = {}
 			node_info["id"] = id_to_give
 			node_info["address"] = ip+":"+str(port)
-			node_info["key"] = public_key
-			node_info["utxo"] = []
+			node_info["key"] = public_key.decode()
+			node_info["utxo"] = []						#balance sto ring??
+			
 			self.ring.append(node_info)
 				
 			data = {}
-			data["id"] = id_to_give
-
-			
+			data["id"] = id_to_give			
 			data["utxo"] = json.dumps(self.utxo)
 			data["blocks"] = json.dumps(self.chain.to_dict())
+			data["current_block"] = json.dumps(self.current_block.to_dict())
+			#print(data["current_block"])
+			#print(data["blocks"])
 			#print("SENDING BLOCKS:",self.chain.blocks[0].listOfTransactions[0].signature)
 			url = "http://"+ip+":"+str(port)+"/data/get"
 			print("Bootstrap posting blockchain,id,utxos to new node at URL:",url,"\n")
@@ -112,14 +112,14 @@ class node:
 				for i in range(1,5):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
 					print("Broadcasting ring....\n")
-
+					#print(self.ring)
 					dumped = json.dumps(self.ring)
 					data ={"ring":dumped}
 					
 					r = requests.post(url,data)
 
 
-	def create_transaction(self, receiver, amount):	
+	def create_transaction(self, receiver, amount):
 		trans_in = []
 		total = 0 
 		for utxo in self.utxo:
@@ -131,6 +131,7 @@ class node:
 				break
 					
 		if total >= amount:
+			print("Creating Transaction with amount:",amount,"NBCs\n")
 			trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
 			print("Broadcasting Transaction...\n")
 			self.broadcast_transaction(trans)
@@ -185,7 +186,7 @@ class node:
 			recipient_utxo["id"] = tx.transaction_id+"1"
 			recipient_utxo["previous_trans_id"] = tx.transaction_id 
 			recipient_utxo["amount"] = tx.amount
-			recipient_utxo["recipient"] = tx.receiver_address.decode()#self.wallet.public_key.decode()
+			recipient_utxo["recipient"] = tx.receiver_address.decode()
 			self.utxo = [self.utxo[x] for x in idx]
 			self.utxo.append(change_utxo)
 			self.utxo.append(recipient_utxo)
@@ -202,26 +203,29 @@ class node:
 		return total
 
 	def add_transaction_to_block(self,tx,capacity,difficulty_bits):
-		
-		block = self.chain.blocks[-1]
-		if len(block.listOfTransactions) == capacity:
-			if block.index != 0 :
-				hash_result,nonce = self.mine_block(block,difficulty_bits)
-				block.hash = hash_result
-				block.nonce = nonce
-				self.chain.blocks[-1] = block
-			new_block = self.create_new_block(difficulty_bits,tx)
-			self.chain.add_block(new_block)
-			print("Added new block at blockchain!\n")
-			#if hash_result != 0:
-			#	return 1
-			#else:
-			#	return 0
+		if len(self.current_block.listOfTransactions) == capacity or self.current_block.index == 0:
+			print("Current block full! Creating new current block...\n")
+			if self.current_block.index != 0 :
+				print("Mining full Block...\n")
+				hash_result,nonce = self.mine_block(self.current_block,difficulty_bits)
+				if hash_result == 0:
+					return 0
+				self.current_block.hash = hash_result
+				self.current_block.nonce = nonce
+			else:
+				self.chain.add_block(self.current_block)
+			self.current_block = self.create_new_block(difficulty_bits,tx)
 		else:
-			block.listOfTransactions.append(tx)
-			block.hashmerkleroot = block.MerkleRoot()
-			block.hash = block.myHash(difficulty_bits)
-			self.chain.blocks[-1] = block
+			self.current_block.listOfTransactions.append(tx)
+			self.current_block.hashmerkleroot = self.current_block.MerkleRoot()
+			self.current_block.hash = self.current_block.myHash(difficulty_bits)
+
+		#print("BLOCKCHAIN:")
+		#for block in self.chain.blocks:
+			#for tx in block.listOfTransactions:
+				#print("INPUTS:",tx.transaction_inputs)
+				#print("AMOUNT:",tx.amount)
+		#print("CURRENT BLOCK:",self.current_block.listOfTransactions[0].transaction_inputs)
 		return 1
 
 
@@ -230,6 +234,7 @@ class node:
 		#nonce is a 32-bit number appended to the header. the whole string is being hashed repeatedly until
 		#the hash result starts with difficulty number of zeros
 		#header of block without nonce
+		print("HASH BEFORE MINING:",block.hash)
 		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
 		for nonce in range(2**32):
@@ -239,7 +244,7 @@ class node:
 				print ("Hash is",hash_result,"\n")
 				block.hash = hash_result
 				block.nonce = nonce
-				print("Broadcasting Mined Block\n")
+				print("Broadcasting Mined Block...\n")
 				self.broadcast_block(block)
 				return hash_result, nonce
 
@@ -248,20 +253,16 @@ class node:
 
 
 	def broadcast_block(self,block):
-		print("call broadcast_block")
 		data = block.to_dict()
 		for i in range(len(self.ring)):
-			if i != self.id:
-
-				url = "http://" + self.ring[i]["address"] + "/broadcast/block"
-				print("url to broadcast block:",url)
-				r = requests.post(url,data)
-				print("post done")
+			#if i != self.id:
+			url = "http://" + self.ring[i]["address"] + "/broadcast/block"
+			print("Broadcasting Mined Block at URL:",url)
+			r = requests.post(url,data)
 
 		
 
 	def valid_proof(self,hash_result, difficulty):
-
 		target = 2 ** (256-difficulty) #number of leading zeros in bits!
 		if np.long(hash_result,16) < target : 
 				return 1
@@ -273,7 +274,7 @@ class node:
 		if block.index != 0:
 			header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits) + str(block.nonce)
 			h = SHA256.new(header.encode()).hexdigest()
-			if block.hash == h and block.previousHash == self.chain.blocks[block.index-1].hash:
+			if self.valid_proof(h,difficulty_bits) and block.previousHash == self.chain.blocks[block.index-1].hash:
 				return 1
 			elif block.previousHash != self.chain.blocks[block.index-1].hash:
 				print("before resolv confiicts in vaidation block")
