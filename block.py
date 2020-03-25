@@ -43,6 +43,9 @@ class Block:
 		for tx in self.listOfTransactions:
 			self.hashmerkleroot.append(tx.transaction_id) #get the id (hash) of every transaction in block
 	
+		if not self.hashmerkleroot:
+			return '0'
+
 		while(len(self.hashmerkleroot)>1):
 			#make sure it's a complete binary tree
 			if (len(self.hashmerkleroot) % 2 != 0) :

@@ -23,15 +23,13 @@ parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
 difficulty_bits = 4 #5
-capacity = 2	#5,10
+capacity = 	2#5,10
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
 
 if args.boot:
-	genesis_block = new_node.create_genesis_block(difficulty_bits)
-	new_node.current_block = genesis_block
-	
+	genesis_block = new_node.create_genesis_block(difficulty_bits,capacity)	
 
 #.......................................................................................
 
@@ -64,20 +62,6 @@ def info():
     return jsonify(response), 200
 
 
-# get all transactions in the blockchain
-
-@app.route('/transactions/get', methods=['GET'])
-def get_transactions():
-    global new_node
-    #transactions = blockchain.transactions
-    #wall=wallet.wallet()
-    #print (type(wall.public_key))
-    #bl = block.Block(1,2,[])
-    #print (bl.nonce)
-    #print(nd.node_info)
-    response = {'transactions': 1}
-    return jsonify(response), 200
-
 @app.route('/register', methods=['POST'])
 def register_node():
 	print("Bootstrap got the new node's posted data...\n")
@@ -94,14 +78,15 @@ def register_node():
 def get_data():
 	
 	global new_node
-	
+	chain=blockchain.Blockchain()
+
 	new_node.id = int(request.form["id"])
 	for i,data in enumerate(json.loads(request.form["blocks"])):
 		trans = []
 		for tx in json.loads(data["listOfTransactions"]):
 			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
 			trans[-1].signature = tx["signature"].encode('latin-1')
-			trans[-1].hash = tx["hash"]
+			trans[-1].transaction_id = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
 			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
@@ -109,11 +94,27 @@ def get_data():
 		new_block.hash = data["hash"]
 		new_block.timestamp = data["timestamp"]
 		new_block.nonce = data["nonce"]
-		new_node.chain.add_block(new_block)
+		chain.add_block(new_block)
 
-	
-	if new_node.validate_chain(difficulty_bits):
+	"""
+	for b in chain.blocks:
+		print("..................BLOCK....................")
+		print("index",b.index)
+		print("block hash", b.hash)
+		print("previous hash",b.previousHash)
+		#print("block sender", request.form["sender"])
+		print()
+		for tx in b.listOfTransactions:
+			print("amount",tx.amount)
+			print("transaction hash",tx.transaction_id)
+	"""
+
+	if new_node.validate_chain(chain,difficulty_bits):
+		new_node.chain=chain
 		print("New Node validated broadcasted Blockchain\n")
+	else:
+		print("New Node unable to validate broadcasted Blockchain\n")
+
 	
 	print("Creating current block...\n")
 	current_block = json.loads(request.form["current_block"])
@@ -121,7 +122,7 @@ def get_data():
 	for tx in json.loads(current_block["listOfTransactions"]):
 		trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
 		trans[-1].signature = tx["signature"].encode('latin-1')
-		trans[-1].hash = tx["hash"]
+		trans[-1].transaction_id = tx["hash"]
 		trans[-1].outputs = json.loads(tx["outputs"])
 		trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 	new_node.current_block = block.Block(int(current_block["index"]), current_block["previousHash"], trans,difficulty_bits)
@@ -159,7 +160,7 @@ def get_blockchain():
 		for tx in json.loads(data["listOfTransactions"]):
 			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
 			trans[-1].signature = tx["signature"].encode('latin-1')
-			trans[-1].hash = tx["hash"]
+			trans[-1].transaction_id = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
 			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
@@ -185,7 +186,7 @@ def get_ring():
 
 @app.route('/broadcast/transaction', methods=['POST'])
 def get_new_transaction():
-	print("Getting transaction from broadcasting....\n")
+	print("Getting transaction from broadcasting.... AMOUNT:", request.form["amount"],"\n")
 	global new_node
 	new_tx = transaction.Transaction(request.form["sender_address"].encode(),None,request.form["receiver_address"].encode(),int(request.form["amount"]),request.form["inputs"])
 	new_tx.signature = request.form["signature"].encode('latin-1')
@@ -198,23 +199,25 @@ def get_new_transaction():
 		print("Added broadcasted transaction to current block!\n")
 	else:
 		print("Could not add transaction to current block.\n")
-	for i in range(len(new_node.utxo)):
-		print(new_node.utxo[i]["amount"])
+	#for i in range(len(new_node.utxo)):
+	#	print(new_node.utxo[i]["amount"])
+	#	print(new_node.utxo[i]["recipient"])
+	#	print()
 	response = {'t': 1}
 	return jsonify(response), 200
 
 
 @app.route('/broadcast/block', methods=['POST'])
 def get_block():
-	print("Getting block from broadcasting....\n")
 	global new_node
 	#adding the first of the broadcasted blocks to blockchain after validating
-	if int(request.form["index"]) not in [b.index for b in new_node.chain.blocks]:
+	if request.form["hashmerkleroot"] not in [b.hashmerkleroot for b in new_node.chain.blocks] and \
+	request.form["index"] not in [b.index for b in new_node.chain.blocks]:
 		trans = []
 		for tx in json.loads(request.form["listOfTransactions"]):
 			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
 			trans[-1].signature = tx["signature"].encode('latin-1')
-			trans[-1].hash = tx["hash"]
+			trans[-1].transaction_id = tx["hash"]
 			trans[-1].outputs = json.loads(tx["outputs"])
 			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
 		new_block = block.Block(int(request.form["index"]), request.form["previousHash"], trans,difficulty_bits)
@@ -222,19 +225,50 @@ def get_block():
 		new_block.nonce = request.form["nonce"]
 		new_block.timestamp = request.form["timestamp"]
 		new_block.hashmerkleroot = request.form["hashmerkleroot"] 
+		print("Getting block from broadcasting.... BLOCK ID:",request.form["index"],"AMOUNT:",trans[-1].amount,"\n")
 		print("Validating broadcasted block...")
-		if new_node.validate_block(new_block,difficulty_bits):
+		if new_node.validate_block(new_block,difficulty_bits,new_node.chain):
 			new_node.chain.add_block(new_block)
 			print("Added validated block to blockchain\n")
 			for b in new_node.chain.blocks:
-				print("........................")
+				print("..................BLOCK....................")
+				print("index",b.index)
+				print("block hash", b.hash)
+				print("previous hash",b.previousHash)
+				print("block sender", request.form["sender"])
+				print()
 				for tx in b.listOfTransactions:
-					print(tx.amount)
+					print("amount",tx.amount)
+					print("transaction hash",tx.transaction_id)
 		else:
 			print("Unable to validate broadcasted block.\n")
 	else:
-		print("Block rejected.\n")
+		print("Block with id "+request.form["index"]+" rejected.\n")
 	response = {'t': 1}
+	return jsonify(response), 200
+
+
+@app.route('/transactions/get', methods=['POST'])
+def get_transactions():
+	print("Getting data to make a new transaction...\n")
+	global new_node
+
+	receiver_id=int(request.form["receiver_id"])
+	amount=int(request.form["amount"])
+	trans = new_node.create_transaction(new_node.ring[receiver_id]["key"].encode(),amount)
+
+	for u in new_node.utxo:
+		print(".............UTXO..................")
+		print("amount",u["amount"])
+		i=0
+		for r in new_node.ring:
+			if u["recipient"]==r["key"]:
+				print("owner",i)
+			i+=1
+		
+
+
+	response = {'transactions': 1}
 	return jsonify(response), 200
 
 # run it once fore every node

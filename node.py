@@ -58,7 +58,7 @@ class node:
 			#print ("data to post:", r.text)
 		return r
 
-	def create_genesis_block(self,difficulty):
+	def create_genesis_block(self,difficulty,capacity):
 		if self.id==0 :
 			
 			idx = 0
@@ -72,14 +72,16 @@ class node:
 			
 			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
 			self.utxo.append(first_utxo)
-			trans = [first_trans]
-			block_new = block.Block(idx, previous_hash, trans,difficulty)
+			#trans = [first_trans]
+			block_new = block.Block(idx, previous_hash,[] ,difficulty)
+			self.current_block=block_new
+			self.add_transaction_to_block(first_trans,capacity,difficulty)
 		else:
 			print("error")
 		return block_new
 
 	def create_new_block(self,difficulty_bits,tx):
-		return block.Block(len(self.chain.blocks),self.chain.blocks[-1].hash,[tx],difficulty_bits)
+		return block.Block(len(self.chain.blocks),self.chain.blocks[-1].hash,tx,difficulty_bits)
 		
 
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
@@ -129,7 +131,7 @@ class node:
 					trans_in.append(utxo)
 			else:
 				break
-					
+
 		if total >= amount:
 			print("Creating Transaction with amount:",amount,"NBCs\n")
 			trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
@@ -137,7 +139,8 @@ class node:
 			self.broadcast_transaction(trans)
 		else:
 			print("Not enough NBCs to complete Transaction!\n")
-		return (trans)
+			return 0
+		return 1
 
 
 	def broadcast_transaction(self,transaction):
@@ -180,7 +183,7 @@ class node:
 			change_utxo = {}
 			change_utxo["id"] = tx.transaction_id+"0"
 			change_utxo["previous_trans_id"] = tx.transaction_id
-			change_utxo["amount"] = self.balance(tx.sender_address,self.utxo)-tx.amount
+			change_utxo["amount"] = self.balance(tx.sender_address,tx.transaction_inputs)-tx.amount
 			change_utxo["recipient"] = tx.sender_address.decode()
 			recipient_utxo = {}
 			recipient_utxo["id"] = tx.transaction_id+"1"
@@ -203,6 +206,9 @@ class node:
 		return total
 
 	def add_transaction_to_block(self,tx,capacity,difficulty_bits):
+		self.current_block.listOfTransactions.append(tx)
+		self.current_block.hashmerkleroot = self.current_block.MerkleRoot()
+		self.current_block.hash = self.current_block.myHash(difficulty_bits)
 		if len(self.current_block.listOfTransactions) == capacity or self.current_block.index == 0:
 			print("Current block full! Creating new current block...\n")
 			if self.current_block.index != 0 :
@@ -214,18 +220,16 @@ class node:
 				self.current_block.nonce = nonce
 			else:
 				self.chain.add_block(self.current_block)
-			self.current_block = self.create_new_block(difficulty_bits,tx)
-		else:
-			self.current_block.listOfTransactions.append(tx)
-			self.current_block.hashmerkleroot = self.current_block.MerkleRoot()
-			self.current_block.hash = self.current_block.myHash(difficulty_bits)
-
-		#print("BLOCKCHAIN:")
-		#for block in self.chain.blocks:
-			#for tx in block.listOfTransactions:
-				#print("INPUTS:",tx.transaction_inputs)
-				#print("AMOUNT:",tx.amount)
+			self.current_block = self.create_new_block(difficulty_bits,[])	
+		"""
+		print("BLOCKCHAIN:")
+		for block in self.chain.blocks:
+			print(".....................................")
+			for tx in block.listOfTransactions:
+				print("INPUTS:",tx.transaction_inputs)
+				print("AMOUNT:",tx.amount)
 		#print("CURRENT BLOCK:",self.current_block.listOfTransactions[0].transaction_inputs)
+		"""
 		return 1
 
 
@@ -234,14 +238,14 @@ class node:
 		#nonce is a 32-bit number appended to the header. the whole string is being hashed repeatedly until
 		#the hash result starts with difficulty number of zeros
 		#header of block without nonce
-		print("HASH BEFORE MINING:",block.hash)
+		print("BLOCK HASH BEFORE MINING:",block.hash)
 		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
 		for nonce in range(2**32):
 			hash_result = hashlib.sha256((header+str(nonce)).encode()).hexdigest()
 			if self.valid_proof(hash_result,difficulty_bits):
 				print ("Success with nonce",nonce)
-				print ("Hash is",hash_result,"\n")
+				print ("Block Hash is",hash_result,"\n")
 				block.hash = hash_result
 				block.nonce = nonce
 				print("Broadcasting Mined Block...\n")
@@ -254,10 +258,11 @@ class node:
 
 	def broadcast_block(self,block):
 		data = block.to_dict()
+		data["sender"]=self.id
 		for i in range(len(self.ring)):
 			#if i != self.id:
 			url = "http://" + self.ring[i]["address"] + "/broadcast/block"
-			print("Broadcasting Mined Block at URL:",url)
+			print("Broadcasting Mined Block with id",block.index,"at URL:",url)
 			r = requests.post(url,data)
 
 		
@@ -269,15 +274,15 @@ class node:
 		return 0
 
 
-	def validate_block(self,block,difficulty_bits):
+	def validate_block(self,block,difficulty_bits,chain):
 		#validate every new block except for genesis block
 		if block.index != 0:
 			header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits) + str(block.nonce)
 			h = SHA256.new(header.encode()).hexdigest()
-			if self.valid_proof(h,difficulty_bits) and block.previousHash == self.chain.blocks[block.index-1].hash:
+			if self.valid_proof(h,difficulty_bits) and block.previousHash == chain.blocks[block.index-1].hash:
 				return 1
-			elif block.previousHash != self.chain.blocks[block.index-1].hash:
-				print("before resolv confiicts in vaidation block")
+			elif block.previousHash != chain.blocks[block.index-1].hash:
+				print("before resolve conflicts in validation block")
 				if self.resolve_conflicts():
 					return 1
 				else:
@@ -287,10 +292,10 @@ class node:
 
 	#concencus functions
 
-	def validate_chain(self,difficulty_bits):
+	def validate_chain(self,chain,difficulty_bits):
 		#check for the longer chain across all nodes
-		for block in self.chain.blocks:
-			if not self.validate_block(block,difficulty_bits):
+		for block in chain.blocks:
+			if not self.validate_block(block,difficulty_bits,chain):
 				return 0
 		return 1
 
