@@ -274,6 +274,30 @@ def get_transactions():
 	response = {'transactions': 1}
 	return jsonify(response), 200
 
+
+@app.route('/transactions/view', methods=['GET'])
+def view_transactions():
+    global new_node
+    last_block = new_node.chain.blocks[-1]
+    
+    response = {'transactions': json.loads(last_block.to_dict()["listOfTransactions"])}
+    return jsonify(response), 200
+
+@app.route('/balance/view', methods=['GET'])
+def get_balance():
+    global new_node
+    balance = new_node.balance(new_node.wallet.public_key,new_node.utxo)
+    response = {'balance': balance}
+    return jsonify(response), 200
+
+@app.route('/transaction/create', methods=['POST'])
+def new_transaction():
+    global new_node
+    new_node.create_transaction(new_node.ring[int(request.form["recipient"])]["key"].encode(),int(request.form["amount"]))
+    response = {'status': "ok"}
+    return jsonify(response), 200    
+
+
 # run it once fore every node
 
 if __name__ == '__main__':
