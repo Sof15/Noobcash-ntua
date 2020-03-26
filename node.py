@@ -3,8 +3,7 @@ import wallet
 import transaction
 import requests
 import json
-import time 
-import hashlib
+import time
 import blockchain
 from Crypto.Hash import SHA,SHA256
 from Crypto.PublicKey import RSA
@@ -12,6 +11,9 @@ from Crypto.Signature import PKCS1_v1_5
 from Crypto import Random
 import numpy as np
 import uuid
+import threading
+import copy
+
 
 class node:
 	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
@@ -28,6 +30,8 @@ class node:
 		self.utxo = []
 		self.ring = []
 		self.current_block = None 
+		self.current_lock = threading.Lock()
+		self.tx_lock = threading.Lock()
 		#here we store information for every node, as its id, ...
 		#...its address (ip:port) its public key and its balance 
 		if is_bootstrap:
@@ -81,7 +85,10 @@ class node:
 		return block_new
 
 	def create_new_block(self,difficulty_bits,tx):
-		return block.Block(len(self.chain.blocks),self.chain.blocks[-1].hash,tx,difficulty_bits)
+		self.chain.lock.acquire()
+		new_block = block.Block(len(self.chain.blocks),self.chain.blocks[-1].hash,tx,difficulty_bits)
+		self.chain.lock.release()
+		return new_block
 		
 
 	def register_node_to_ring(self, is_bootstrap,ip,port,public_key):
@@ -119,7 +126,7 @@ class node:
 					data ={"ring":dumped}
 					
 					r = requests.post(url,data)
-
+			return r
 
 	def create_transaction(self, receiver, amount):
 		trans_in = []
@@ -136,6 +143,19 @@ class node:
 			print("Creating Transaction with amount:",amount,"NBCs\n")
 			trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, receiver, amount, trans_in)
 			print("Broadcasting Transaction...\n")
+			'''
+			threads = []
+			#print("THREAD:",threading.get_ident())
+			for i in range(len(self.ring)):
+				url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
+				print("Broadcasting Transaction at URL:",url,"\n")
+				thread = threading.Thread(target=self.broadcast_transaction,args = (trans,url))
+				thread.start()
+				threads.append(thread)
+
+			for t in threads:
+				t.join(timeout = 5)
+			'''
 			self.broadcast_transaction(trans)
 		else:
 			print("Not enough NBCs to complete Transaction!\n")
@@ -148,7 +168,7 @@ class node:
 		for i in range(len(self.ring)):
 			url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
 			r = requests.post(url,data)
-
+		
 
 
 	def verify_signature(self,sender_public_key,signature,tx_id):
@@ -163,13 +183,14 @@ class node:
 	def validate_transaction(self,tx):
 		# use of signature and NBCs balance
 		# and check tx inputs/outputs for enough NBCs
-		
+		self.tx_lock.acquire()
+		print("Validating broadcasted transaction...\n")
 		found = True
 		for utxo_in in tx.transaction_inputs:
 			if ((utxo_in["id"] not in [utxo["id"] for utxo in self.utxo]) or utxo_in["recipient"]!=tx.sender_address.decode()):
 				found = False
 				break
-
+		#print(found)
 		if self.verify_signature(tx.sender_address,tx.signature,tx.temp_id) and found :	
 			idx = []
 			temp = [(i,utxo["id"]) for i,utxo in enumerate(self.utxo)]
@@ -193,9 +214,21 @@ class node:
 			self.utxo = [self.utxo[x] for x in idx]
 			self.utxo.append(change_utxo)
 			self.utxo.append(recipient_utxo)
+
+			print("Transaction Validated!\n")
+
+			for u in self.utxo:
+				print(".............UTXO..................")
+				print("amount",u["amount"])
+
+				for i,r in enumerate(self.ring):
+					if u["recipient"]==r["key"]:
+						print("owner",i)
+			self.tx_lock.release()
 			return 1
 		else: 
 			print("Unable to validate Transaction.")
+		self.tx_lock.release()
 		return 0
 
 	def balance(self,recipient,utxo_list):
@@ -206,9 +239,12 @@ class node:
 		return total
 
 	def add_transaction_to_block(self,tx,capacity,difficulty_bits):
+		self.current_lock.acquire()
 		self.current_block.listOfTransactions.append(tx)
 		self.current_block.hashmerkleroot = self.current_block.MerkleRoot()
 		self.current_block.hash = self.current_block.myHash(difficulty_bits)
+		#print("THREAD",threading.get_ident(),"AT",time.time())
+		#print(len(self.current_block.listOfTransactions))
 		if len(self.current_block.listOfTransactions) == capacity or self.current_block.index == 0:
 			print("Current block full! Creating new current block...\n")
 			if self.current_block.index != 0 :
@@ -219,17 +255,34 @@ class node:
 				self.current_block.hash = hash_result
 				self.current_block.nonce = nonce
 			else:
+				self.chain.lock.acquire()
 				self.chain.add_block(self.current_block)
-			self.current_block = self.create_new_block(difficulty_bits,[])	
-		"""
-		print("BLOCKCHAIN:")
-		for block in self.chain.blocks:
-			print(".....................................")
-			for tx in block.listOfTransactions:
-				print("INPUTS:",tx.transaction_inputs)
-				print("AMOUNT:",tx.amount)
-		#print("CURRENT BLOCK:",self.current_block.listOfTransactions[0].transaction_inputs)
-		"""
+				self.chain.lock.release()
+			'''
+			print("..........AFTER ADD BLOCK..........\n")
+			for b in self.chain.blocks:
+				print("..................BLOCK....................")
+				print("index",b.index)
+				print("block hash", b.hash)
+				print("previous hash",b.previousHash)
+				print("block sender", self.id)
+				print()
+				for tx in b.listOfTransactions:
+					print("amount",tx.amount)
+					print("transaction hash",tx.transaction_id)
+			'''
+			self.current_block = self.create_new_block(difficulty_bits,[])
+		self.current_lock.release()
+		print("\n")
+		b = self.current_block
+		print("...............CURRENT BLOCK....................")
+		print("index",b.index)
+		print("block hash", b.hash)
+		print("previous hash",b.previousHash)
+		print()
+		for tx in b.listOfTransactions:
+			print("amount",tx.amount)
+			print("transaction hash",tx.transaction_id)
 		return 1
 
 
@@ -242,13 +295,24 @@ class node:
 		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
 		for nonce in range(2**32):
-			hash_result = hashlib.sha256((header+str(nonce)).encode()).hexdigest()
+			hash_result = SHA256.new((header+str(nonce)).encode()).hexdigest()
 			if self.valid_proof(hash_result,difficulty_bits):
 				print ("Success with nonce",nonce)
 				print ("Block Hash is",hash_result,"\n")
 				block.hash = hash_result
 				block.nonce = nonce
-				print("Broadcasting Mined Block...\n")
+				
+				'''
+				threads = []
+				for i in range(len(self.ring)):
+					url = "http://" + self.ring[i]["address"] + "/broadcast/block"
+					thread = threading.Thread(target=self.broadcast_block,args = (block,url))
+					thread.start()
+					threads.append(thread)
+				
+				for t in threads:
+					t.join(timeout=5)
+				'''
 				self.broadcast_block(block)
 				return hash_result, nonce
 
@@ -258,13 +322,12 @@ class node:
 
 	def broadcast_block(self,block):
 		data = block.to_dict()
-		data["sender"]=self.id
 		for i in range(len(self.ring)):
-			#if i != self.id:
 			url = "http://" + self.ring[i]["address"] + "/broadcast/block"
-			print("Broadcasting Mined Block with id",block.index,"at URL:",url)
+			data["sender"]=self.id
+			print("Broadcasting Mined Block with id",block.index,"at URL:",url,"\n")
 			r = requests.post(url,data)
-
+		
 		
 
 	def valid_proof(self,hash_result, difficulty):

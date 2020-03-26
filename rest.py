@@ -23,7 +23,7 @@ parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
 difficulty_bits = 4 #5
-capacity = 	2#5,10
+capacity = 	2 #5,10
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
@@ -42,11 +42,11 @@ def registernode():
 			print("New node being registered...")
 			try:
 				r = new_node.register(args.boot)
-				#print(new_node.chain.blocks)
+				print("Status Code:",r.status_code)
 				if r.status_code == 200:
 					print("New node registered!\n")
 					done = True
-				print("Status Code:",r.status_code)
+					#thread.join()
 			except Exception as e:
 				print('Failed: '+ str(e),'\n')
 			time.sleep(3)
@@ -70,7 +70,7 @@ def register_node():
 	ip = request.form["ip"]
 	port = request.form["port"]
 	new_node.register_node_to_ring(args.boot,ip,port,public_key.encode())
-	trans = new_node.create_transaction(new_node.ring[-1]["key"].encode(),100)
+	new_node.create_transaction(new_node.ring[-1]["key"].encode(),100)
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -155,6 +155,7 @@ def get_blockchain():
 	
 	global new_node
 	new_node.chain.blocks = []
+	new_node.chain.lock.acquire()
 	for i,data in enumerate(json.loads(request.form["blocks"])):
 		trans = []
 		for tx in json.loads(data["listOfTransactions"]):
@@ -169,8 +170,7 @@ def get_blockchain():
 		new_block.timestamp = data["timestamp"]
 		new_block.nonce = data["nonce"]
 		new_node.chain.add_block(new_block)
-	
-	#if new_node.validate_chain(difficulty_bits):
+	new_node.chain.lock.release()
 	print("New Node got Blockchain")
 	response = {'t': 1}
 	return jsonify(response), 200
@@ -186,6 +186,7 @@ def get_ring():
 
 @app.route('/broadcast/transaction', methods=['POST'])
 def get_new_transaction():
+	print("THREAD:",threading.get_ident())
 	print("Getting transaction from broadcasting.... AMOUNT:", request.form["amount"],"\n")
 	global new_node
 	new_tx = transaction.Transaction(request.form["sender_address"].encode(),None,request.form["receiver_address"].encode(),int(request.form["amount"]),request.form["inputs"])
@@ -211,8 +212,20 @@ def get_new_transaction():
 def get_block():
 	global new_node
 	#adding the first of the broadcasted blocks to blockchain after validating
-	if request.form["hashmerkleroot"] not in [b.hashmerkleroot for b in new_node.chain.blocks] and \
-	request.form["index"] not in [b.index for b in new_node.chain.blocks]:
+	new_node.chain.lock.acquire()
+	#if request.form["hashmerkleroot"] not in [b.hashmerkleroot for b in new_node.chain.blocks] and \
+	#int(request.form["index"]) not in [b.index for b in new_node.chain.blocks]:
+	ok = True
+	temp = [tx["hash"] for tx in json.loads(request.form["listOfTransactions"])]
+	for t in temp:
+		for b in new_node.chain.blocks:
+			for tr in b.listOfTransactions:
+				if t == tr.transaction_id:
+					ok = False
+					break
+			if not ok:
+				break
+	if ok and int(request.form["index"]) not in [b.index for b in new_node.chain.blocks]:
 		trans = []
 		for tx in json.loads(request.form["listOfTransactions"]):
 			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
@@ -240,10 +253,12 @@ def get_block():
 				for tx in b.listOfTransactions:
 					print("amount",tx.amount)
 					print("transaction hash",tx.transaction_id)
+			
 		else:
 			print("Unable to validate broadcasted block.\n")
 	else:
 		print("Block with id "+request.form["index"]+" rejected.\n")
+	new_node.chain.lock.release()
 	response = {'t': 1}
 	return jsonify(response), 200
 
@@ -256,18 +271,6 @@ def get_transactions():
 	receiver_id=int(request.form["receiver_id"])
 	amount=int(request.form["amount"])
 	trans = new_node.create_transaction(new_node.ring[receiver_id]["key"].encode(),amount)
-
-	for u in new_node.utxo:
-		print(".............UTXO..................")
-		print("amount",u["amount"])
-		i=0
-		for r in new_node.ring:
-			if u["recipient"]==r["key"]:
-				print("owner",i)
-			i+=1
-		
-
-
 	response = {'transactions': 1}
 	return jsonify(response), 200
 
@@ -276,4 +279,4 @@ def get_transactions():
 if __name__ == '__main__':
 	if args.boot == 0 :
 		registernode()
-	app.run(host=args.ip,port=args.port)	
+	app.run(host=args.ip,port=args.port,threaded=True)	

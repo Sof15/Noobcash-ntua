@@ -4,6 +4,7 @@ from datetime import datetime
 import Crypto.Random.random as rnd
 from Crypto.Hash import SHA,SHA256
 import json
+import threading
 
 class Block:
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
@@ -14,6 +15,7 @@ class Block:
 		self.listOfTransactions = list_trans
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
+		#self.lock = threading.Lock()
 	
 	def to_dict(self):
 		data = {}

@@ -14,7 +14,7 @@ import logging
 class Blockchain():
 	def __init__(self,):
 		self.blocks = [] #list of validated blocks
-
+		self.lock = threading.Lock()
 
 
 	def add_block(self,block):
