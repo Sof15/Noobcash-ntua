@@ -16,7 +16,7 @@ def make_transactions_from_file(sender,file):
 			data["amount"] = amount
 			
 			# edw na ftiaxoume th swsth ip otan ginei apo ta vm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			ip="http://127.0.0.1"
+			ip="http://0.0.0.0"
 			port = "500"+str(sender)
 
 			url = ip+":"+port+"/transactions/get"
