@@ -5,17 +5,21 @@ import Crypto.Random.random as rnd
 from Crypto.Hash import SHA,SHA256
 import json
 import threading
+import random
 
 class Block:
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
 		self.index = idx
 		self.previousHash = prev_hash  #hash of the previous block header
 		self.timestamp = datetime.timestamp(datetime.now())
-		self.nonce = 0
+		if idx == 0:
+			self.nonce = 0
+		else:
+			self.nonce = random.randint(0,2**32-1)
 		self.listOfTransactions = list_trans
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
-		#self.lock = threading.Lock()
+		
 	
 	def to_dict(self):
 		data = {}
@@ -26,7 +30,6 @@ class Block:
 		temp_list = []
 		for tx in self.listOfTransactions:
 			temp_list.append(tx.to_dict())
-		#print(temp_list)
 		data["listOfTransactions"] = json.dumps(temp_list)
 		data["hashmerkleroot"] = self.hashmerkleroot
 		data["hash"] = self.hash

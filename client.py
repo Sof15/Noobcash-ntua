@@ -6,6 +6,7 @@ import json
 from termcolor import colored
 from pyfiglet import Figlet
 from tabulate import tabulate
+import time
 
 	        
 class balance:
@@ -14,7 +15,13 @@ class balance:
 		parser.add_argument('--port', type=str, required=True)
 		args = parser.parse_args(sys.argv[2:])
 		url = "http://0.0.0.0:{}/balance/view".format(args.port)
-		r = requests.get(url) 
+		while(1):
+			try:
+				r = requests.get(url)
+				if r.status_code == 200:
+					break
+			except Exception as e:
+				time.sleep(2)
 
 		print("\033[1m"'The wallet balance is', colored(r.json()["balance"],'yellow'), "\033[1m"'NBC.\n')
 
@@ -24,7 +31,13 @@ class view:
 		parser.add_argument('--port', type=str, required=True)
 		args = parser.parse_args(sys.argv[2:])
 		url = "http://0.0.0.0:{}/transactions/view".format(args.port)
-		r = requests.get(url) 
+		while(1):
+			try:
+				r = requests.get(url)
+				if r.status_code == 200:
+					break
+			except Exception as e:
+				time.sleep(2)
 
 		print(colored("\033[1m"'The last block has the following transactions...''\033[0m'))
 		
@@ -47,8 +60,14 @@ class t:
 		parser.add_argument('--amount', type=int, required=True)
 		args = parser.parse_args(sys.argv[2:])
 		url = "http://0.0.0.0:{}/transaction/create".format(args.port)
-		data = {'recipient':args.recipient, 'amount':args.amount}
-		r = requests.post(url,data) 
+		data = {'receiver_id':args.recipient, 'amount':args.amount}
+		while(1):
+			try:
+				r = requests.post(url,data)
+				if r.status_code == 200:
+					break
+			except Exception as e:
+				time.sleep(2) 
 		if(r.status_code==200):
 			print(colored("Successfull transaction to node with id {}\n".format(args.recipient),'green'))
 		#print(r.status_code)

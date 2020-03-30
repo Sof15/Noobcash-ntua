@@ -8,7 +8,7 @@ from Crypto.Hash import SHA,SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
 import uuid
-
+import time
 import requests
 from flask import Flask, jsonify, request, render_template
 
@@ -26,7 +26,7 @@ class Transaction:
         self.transaction_id = h.hexdigest() #: το hash του transaction
         if (sender_private_key): 
             self.signature = self.sign_transaction(sender_private_key)
-
+        self.timestamp = time.time()
 
     def to_dict(self):
         #create dictionary of transaction's data for broadcasting

@@ -1,10 +1,12 @@
 import requests
 import threading
 import sys
+import time
 
 def make_transactions_from_file(sender,file):
 	def read_and_post():
-		f = open("transaction/5nodes/"+file, "r")
+		f = open("transactions/5nodes/"+file, "r")
+		#f = open(file, "r")
 		for line in f.readlines():
 			print(line)
 			line = line.split()
@@ -16,12 +18,18 @@ def make_transactions_from_file(sender,file):
 			data["amount"] = amount
 			
 			# edw na ftiaxoume th swsth ip otan ginei apo ta vm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			ip="http://0.0.0.0"
+			ip="http://127.0.0.1"
 			port = "500"+str(sender)
 
-			url = ip+":"+port+"/transactions/get"
+			url = ip+":"+port+"/transactions/create"
 			print("Posting new transaction data to Node number "+str(sender)+"\n")
-			r = requests.post(url,data)
+			while(1):
+				try:
+					r = requests.post(url,data)
+					if r.status_code == 200:
+						break
+				except Exception as e:
+					time.sleep(2)
 		return r
 
 	thread = threading.Thread(target=read_and_post)
