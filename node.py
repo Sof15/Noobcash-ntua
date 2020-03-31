@@ -15,6 +15,7 @@ import threading
 import copy
 from termcolor import colored
 
+N = 5
 
 class node:
 	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
@@ -34,10 +35,9 @@ class node:
 		self.current_lock = threading.Lock()
 		self.tx_lock = threading.Lock()
 		self.list_lock = threading.Lock()
-		self.done = threading.Lock()
-		self.done.acquire()
 		self.tx_list = []
 		self.conflict = False
+		self.times = 0
 		#here we store information for every node, as its id, ...
 		#...its address (ip:port) its public key and its balance 
 		if is_bootstrap:
@@ -79,11 +79,11 @@ class node:
 			sender = "0".encode()
 			#trans = [create_transaction(sender,self.wallet.public_key, 100*5)]
 			#edo isos na min einai sostos o tropos pou dimiourgoume to transaction
-			first_trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*5,[])
+			first_trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*N,[])
 			
 			rand_id = uuid.uuid1()
 			
-			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':500, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
+			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':100*N, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
 			self.utxo.append(first_utxo)
 			#trans = [first_trans]
 			self.current_block = block.Block(0, '1',[] ,difficulty)
@@ -132,8 +132,8 @@ class node:
 				except Exception as e:
 					time.sleep(2)
 
-			if (len(self.ring)==5):
-				for i in range(1,5):
+			if (len(self.ring)==N):
+				for i in range(1,N):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
 					print("Broadcasting ring....\n")
 					data = {}
@@ -428,7 +428,7 @@ class node:
 		
 		data = {"address": self.ring[self.id]["address"]}
 		#self.chain.lock.acquire()	#exei klidothei sto broadcast block ap opou kaleitai
-		#while (1): 
+		
 		lengths = []
 		for i in range(len(self.ring)):
 			if i != self.id:
@@ -456,8 +456,7 @@ class node:
 		print(lengths)
 		idxs = [int(length["id"]) for length in lengths if length["length"] == lengths[0]["length"]]
 		idx = min(idxs)
-		#if lengths[0]["length"] > lengths[1]["length"]:
-		#	break
+
 
 		if idx == self.id:
 			self.tx_lock.acquire()
@@ -468,12 +467,18 @@ class node:
 						break
 			
 			self.tx_lock.release()
-			self.done.release()
+			#self.times = 4
+			
 		else:
 			url = "http://" + self.ring[idx]["address"] + "/blockchain/request"
+			print("Asking blockchain from URL:",url)
+			data["conflict"] = [length["conflict"] for length in lengths  if length["id"] ==idx][0]
 			while(1):
 				try:
 					r = requests.post(url,data)
+					if json.loads(r.text)["status"] == "error":
+						self.resolve_conflicts()
+						break
 					if r.status_code == 200:
 						break
 				except Exception as e:
