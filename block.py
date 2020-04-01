@@ -37,7 +37,7 @@ class Block:
 
 	def myHash(self,difficulty_bits):
 		#calculate self.hash
-		header = str(self.index)+str(self.previousHash)+ self.hashmerkleroot +str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
+		header = str(self.index)+str(self.previousHash) + self.hashmerkleroot + str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
 		hash_result = SHA256.new(header.encode()).hexdigest()
 		return hash_result
 

@@ -38,15 +38,12 @@ class node:
 		self.tx_list = []
 		self.conflict = False
 		self.times = 0
-		#here we store information for every node, as its id, ...
-		#...its address (ip:port) its public key and its balance 
+		
 		if is_bootstrap:
 			boot_info = {}
 			boot_info["address"] = ip+":"+str(port)
 			boot_info["id"]=self.id
 			boot_info["key"] = self.wallet.public_key.decode()
-			
-			# all nodes know the ip:port of bootstrap node 
 			self.ring.append(boot_info)
 			
 
@@ -71,7 +68,6 @@ class node:
 						break
 				except Exception as e:
 					time.sleep(2)
-			#print ("data to post:", r.text)
 		return r
 
 	def create_genesis_block(self,difficulty,capacity):
@@ -167,19 +163,14 @@ class node:
 			
 			
 			threads = []
-			#print("THREAD:",threading.get_ident())
 			start = time.time()
 			for i in range(len(self.ring)):
-				if i!=self.id:
-					url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
-					print("Broadcasting Transaction at URL:",url,"\n")
-					thread = threading.Thread(target=self.broadcast_transaction,args = (trans,url,start))
-					thread.start()
-					threads.append(thread)
+				url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
+				print("Broadcasting Transaction at URL:",url,"\n")
+				thread = threading.Thread(target=self.broadcast_transaction,args = (trans,url,start))
+				thread.start()
+				threads.append(thread)
 
-			if self.id < len(self.ring):
-				url = "http://" + self.ring[self.id]["address"] + "/broadcast/transaction"
-				self.broadcast_transaction(trans,url,start)
 
 			for t in threads:
 				t.join()
@@ -192,11 +183,8 @@ class node:
 
 
 	def broadcast_transaction(self,transaction,url,start):
-		#print("THREAD:",threading.get_ident())
 		data = transaction.to_dict()
 		data["time"] = start
-		#for i in range(len(self.ring)):
-		#	url = "http://" + self.ring[i]["address"] + "/broadcast/transaction"
 		while(1):
 			try:
 				r = requests.post(url,data)
@@ -371,8 +359,6 @@ class node:
 
 	def broadcast_block(self,block,url):
 		data = block.to_dict()
-		#for i in range(len(self.ring)):
-		#	url = "http://" + self.ring[i]["address"] + "/broadcast/block"
 		data["sender"]=self.id
 		print("Broadcasting Mined Block with id",block.index,"at URL:",url,"\n")
 		while(1):
@@ -406,9 +392,8 @@ class node:
 			elif block.previousHash != chain.blocks[idx].hash:
 				self.conflict = True
 				print(colored("ERROR - BLOCKCHAIN CONFLICT\n",'red'))
-				#print("GOT BLOCK WITH PREVHASH:", block.previousHash, "MY PREVHASH IS:",chain.blocks[idx].hash,"\n")
 				print("Resolving blockchain conflicts...\n")
-				if self.resolve_conflicts():
+				if self.resolve_conflicts(difficulty_bits):
 					self.conflict = False
 				#self.resolve_conflicts()
 				return 0
@@ -423,7 +408,7 @@ class node:
 				return 0
 		return 1
 
-	def resolve_conflicts(self):
+	def resolve_conflicts(self,difficulty_bits):
 		#resolve correct chain
 		
 		data = {"address": self.ring[self.id]["address"]}
@@ -457,32 +442,67 @@ class node:
 		idxs = [int(length["id"]) for length in lengths if length["length"] == lengths[0]["length"]]
 		idx = min(idxs)
 
-
-		if idx == self.id:
-			self.tx_lock.acquire()
+		
+		#if idx == self.id:
+		#	print(colored("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Every Node is in conflict!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",'red'))
+		#	self.tx_lock.acquire()
+		'''
 			for i in range(len(self.utxo)):
 				for tx in self.current_block.listOfTransactions:
 					if self.utxo[i]["previous_trans_id"] == tx.transaction_id:
 						self.utxo[i]["recipient"] = tx.sender_address.decode()
 						break
-			
-			self.tx_lock.release()
+		'''
+		#	self.tx_lock.release()
 			#self.times = 4
-			
-		else:
+			#print("Updated UTXO!\n")
+		
+		if idx != self.id:
 			url = "http://" + self.ring[idx]["address"] + "/blockchain/request"
-			print("Asking blockchain from URL:",url)
 			data["conflict"] = [length["conflict"] for length in lengths  if length["id"] ==idx][0]
 			while(1):
 				try:
+					print("Asking blockchain from URL:",url)
 					r = requests.post(url,data)
-					if json.loads(r.text)["status"] == "error":
-						self.resolve_conflicts()
-						break
+					#if json.loads(r.text)["status"] == "error":
+					#	self.resolve_conflicts(difficulty_bits)
+					#	return 1
 					if r.status_code == 200:
 						break
 				except Exception as e:
 					time.sleep(2)
 		
+			self.tx_lock.acquire()
+			self.utxo = json.loads(r.json()["utxo"])
+			self.tx_lock.release()
+
+			blocks = []
+			for i,data in enumerate(json.loads(r.json()["blocks"])[::-1]):
+				trans = []
+				for tx in json.loads(data["listOfTransactions"]):
+					trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
+					trans[-1].signature = tx["signature"].encode('latin-1')
+					trans[-1].transaction_id = tx["hash"]
+					trans[-1].outputs = json.loads(tx["outputs"])
+					trans[-1].temp_id = tx["temp_id"].encode('latin-1')
+				new_block = block.Block(len(json.loads(r.json()["blocks"]))-i-1,data["previousHash"],trans,difficulty_bits)
+				new_block.hashmerkleroot = data["hashmerkleroot"]
+				new_block.hash = data["hash"]
+				new_block.timestamp = data["timestamp"]
+				new_block.nonce = data["nonce"]
+				#self.chain.add_block(new_block)
+				blocks.insert(0,new_block)
+				for j,b in enumerate(self.chain.blocks[::-1]):
+					if b.hash == blocks[0].previousHash:
+						self.chain.blocks = self.chain.blocks[:len(self.chain.blocks)-j]
+						self.chain.blocks.extend(blocks)
+						print("REPLACED THE LAST ",j,"BLOCKS\n")
+						print(colored("New Node resolved Blockchain conflict\n",'green'))
+						return 1
+
+			
+			#self.chain.lock.release()		chain is released in broadcast/block
+
+			print(colored("New Node resolved Blockchain conflict\n",'green'))
 
 		return 1

@@ -22,8 +22,8 @@ parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
-difficulty_bits = 4	 #5
-capacity = 	1  #10,1,5
+difficulty_bits = 4	 #4,5
+capacity = 	1 #10,1,5
 
 global new_node
 new_node = node.node(args.boot,args.ip,args.port)
@@ -34,24 +34,22 @@ if args.boot:
 #.......................................................................................
 
 #source : https://networklore.com/start-task-with-flask/
-def registernode():
-	def start_register():
-		done = False
-		global new_node
-		while(not done):
-			print("New node being registered...")
-			try:
-				r = new_node.register(args.boot)
-				print("Status Code:",colored(r.status_code,'green'))
-				if r.status_code == 200:
-					print(colored("New node registered!\n",'green'))
-					done = True
-			except Exception as e:
-				print('Failed: '+ str(e),'\n')
-			time.sleep(3)
 
-	thread = threading.Thread(target=start_register)
-	thread.start()
+def start_register():
+	global new_node
+	while(1):
+		print("New node being registered...")
+		try:
+			r = new_node.register(args.boot)
+			print("Status Code:",colored(r.status_code,'green'))
+			if r.status_code == 200:
+				print(colored("New node registered!\n",'green'))
+				break
+		except Exception as e:
+			print('Failed: '+ str(e),'\n')
+		time.sleep(2)
+
+	
     
 
 @app.route('/node_info', methods=['GET'])
@@ -80,6 +78,8 @@ def get_data():
 	chain=blockchain.Blockchain()
 
 	new_node.id = int(request.form["id"])
+
+
 	for i,data in enumerate(json.loads(request.form["blocks"])):
 		trans = []
 		for tx in json.loads(data["listOfTransactions"]):
@@ -146,69 +146,34 @@ def give_length():
 @app.route('/blockchain/request',methods=['POST'])
 def give_blockchain():
 	global new_node
-	print("Sending blockchain...\n")
+	print("Sending blockchain at URL:",request.form["address"],"\n")
 	if not new_node.conflict: #and not request.form["conflict"]:	#if I dont/didn't have a conflict lock chain before sending 
 		new_node.chain.lock.acquire()	
 	elif new_node.conflict and not request.form["conflict"]:	#if the other node thinks im ok but i have
-		response = {"status":"error"}							# conflict now, retry
-		return jsonify(response), 200
-	#elif new_node.times <= 0 :									#if the other node knows we are all in conflict
-	#	print(colored("ERROR",'red'))							#but I don't know it yet,retry
+		print(colored("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",'red'))
+		#response = {"status":"error"}							# conflict now, retry
+		#return jsonify(response), 200							#if the other node knows we are all in conflict
+	#elif new_node.times <= 0 :									#but I don't know it yet,retry
+	#	print(colored("ERROR 2 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",'red'))	
 	#	response = {"status":"error"}
 	#	return jsonify(response), 200
+	else:
+		print(colored("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Every Node is in conflict  2  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",'red'))
+	#	while(new_node.times == 0 ):
+	#		pass												#else wait until utxos are updated
+	#	new_node.times -=1
 
 	new_node.tx_lock.acquire()
-	print("ACQUIRED ALL LOCKS!\n")
 	data = {}
 	data["blocks"] = json.dumps(new_node.chain.to_dict())
-	data["current_block"] = json.dumps(new_node.current_block.to_dict())
 	data["utxo"] = json.dumps(new_node.utxo)
+	data["status"] = "ok"
 	new_node.tx_lock.release()
-	url = "http://" + request.form["address"] + "/blockchain/get"
-	while(1):
-		try:
-			r = requests.post(url,data)
-			if r.status_code == 200:
-				break
-		except Exception as e:
-			time.sleep(2)
 	if not new_node.conflict and new_node.chain.lock.locked():
 		new_node.chain.lock.release()
-	#new_node.times -= 1
-	response = {"status":200}
-	return jsonify(response), 200
+	return jsonify(data), 200
 
 
-
-@app.route('/blockchain/get',methods=['POST'])
-def get_blockchain():
-	
-	global new_node
-	#new_node.chain.lock.acquire()   exei klidothei sto /broadcast/block
-	new_node.chain.blocks = []
-	for i,data in enumerate(json.loads(request.form["blocks"])):
-		trans = []
-		for tx in json.loads(data["listOfTransactions"]):
-			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-			trans[-1].signature = tx["signature"].encode('latin-1')
-			trans[-1].transaction_id = tx["hash"]
-			trans[-1].outputs = json.loads(tx["outputs"])
-			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
-		new_block.hashmerkleroot = data["hashmerkleroot"]
-		new_block.hash = data["hash"]
-		new_block.timestamp = data["timestamp"]
-		new_block.nonce = data["nonce"]
-		new_node.chain.add_block(new_block)
-
-	new_node.tx_lock.acquire()
-	new_node.utxo = json.loads(request.form["utxo"])
-	new_node.tx_lock.release()
-	#new_node.chain.lock.release()
-
-	print(colored("New Node resolved Blockchain conflict\n",'green'))
-	response = {'t': 1}
-	return jsonify(response), 200
 
 @app.route('/broadcast/ring', methods=['POST'])
 def get_ring():
@@ -301,7 +266,7 @@ def get_block():
 	in_chain = False
 	temp = [tx["hash"] for tx in json.loads(request.form["listOfTransactions"])]
 	for t in temp:
-		for b in new_node.chain.blocks:
+		for b in new_node.chain.blocks[::-1]:
 			for tr in b.listOfTransactions:
 				if t == tr.transaction_id:
 					in_chain = True
@@ -328,18 +293,19 @@ def get_block():
 			
 			print(colored("Added validated block with id "+str(new_block.index)+" to blockchain\n",'green'))
 			
-			for b in new_node.chain.blocks:
-				print("..................BLOCK....................")
-				print("index",b.index)
-				print("block hash", b.hash)
-				print("previous hash",b.previousHash)
-				print("block sender", request.form["sender"],"\n")
-				for tx in b.listOfTransactions:
-					print(colored("amount: " + str(tx.amount),'yellow'))
-					print("transaction hash",tx.transaction_id)
-			
 		else:
 			print(colored("Unable to validate broadcasted block.\n",'red'))
+
+		for b in new_node.chain.blocks:
+			print("..................BLOCK....................")
+			print("index",b.index)
+			print("block hash", b.hash)
+			print("previous hash",b.previousHash)
+			print("block sender", request.form["sender"],"\n")
+			for tx in b.listOfTransactions:
+				print(colored("amount: " + str(tx.amount),'yellow'))
+				print("transaction hash",tx.transaction_id)
+
 	else:
 		print(colored("Block with id "+request.form["index"]+" rejected.\n",'red'))
 	#if new_node.chain.lock.locked():
@@ -381,5 +347,6 @@ def get_balance():
 
 if __name__ == '__main__':
 	if args.boot == 0 :
-		registernode()
+		thread = threading.Thread(target=start_register)
+		thread.start()
 	app.run(host=args.ip,port=args.port,threaded=True)	
