@@ -46,7 +46,7 @@ class Transaction:
         '''
         Sign transaction with private key
         '''
-        print("Signing Transaction...\n")
+        #print("Signing Transaction...\n")
         h = SHA256.new(self.temp_id)
         key = RSA.importKey(sender_private_key)
         signer = PKCS1_v1_5.new(key)
