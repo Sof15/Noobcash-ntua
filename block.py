@@ -6,8 +6,9 @@ from Crypto.Hash import SHA,SHA256
 import json
 import threading
 import random
+import jsonpickle
 
-class Block:
+class Block(object):
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
 		self.index = idx
 		self.previousHash = prev_hash  #hash of the previous block header
@@ -20,7 +21,11 @@ class Block:
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
 		
-	
+	def serialize(self):
+		temp=jsonpickle.encode(self)
+		return temp
+
+	"""
 	def to_dict(self):
 		data = {}
 		data["index"] = self.index
@@ -34,6 +39,8 @@ class Block:
 		data["hashmerkleroot"] = self.hashmerkleroot
 		data["hash"] = self.hash
 		return data
+	"""
+	
 
 	def myHash(self,difficulty_bits):
 		#calculate self.hash

@@ -14,6 +14,7 @@ import uuid
 import threading
 import copy
 from termcolor import colored
+import jsonpickle
 
 N = 5
 
@@ -117,8 +118,8 @@ class node:
 			data = {}
 			data["id"] = id_to_give			
 			data["utxo"] = json.dumps(self.utxo)
-			data["blocks"] = json.dumps(self.chain.to_dict())
-			data["current_block"] = json.dumps(self.current_block.to_dict())
+			data["blocks"] = self.chain.serialize()
+			data["current_block"] = self.current_block.serialize()
 			
 			url = "http://"+ip+":"+str(port)+"/data/get"
 			#print("Bootstrap posting blockchain,id,utxos to new node at URL:",url,"\n")
@@ -185,8 +186,10 @@ class node:
 
 
 	def broadcast_transaction(self,transaction,url,start):
-		data = transaction.to_dict()
+		data={}
+		data["transaction"] = transaction.serialize()
 		data["time"] = start
+
 		while(1):
 			try:
 				r = requests.post(url,data)
@@ -347,7 +350,8 @@ class node:
 
 
 	def broadcast_block(self,block,url):
-		data = block.to_dict()
+		data={}
+		data["block"] = block.serialize()
 		data["sender"]=self.id
 		#print("Broadcasting Mined Block with id",block.index,"at URL:",url,"\n")
 		while(1):
@@ -484,30 +488,16 @@ class node:
 			self.utxo = json.loads(r.json()["utxo"])
 			self.utxo_lock.release()
 
-			blocks = []
-			for i,data in enumerate(json.loads(r.json()["blocks"])[::-1]):
-				trans = []
-				for tx in json.loads(data["listOfTransactions"]):
-					trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-					trans[-1].signature = tx["signature"].encode('latin-1')
-					trans[-1].transaction_id = tx["hash"]
-					trans[-1].outputs = json.loads(tx["outputs"])
-					trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-				new_block = block.Block(len(json.loads(r.json()["blocks"]))-i-1,data["previousHash"],trans,difficulty_bits)
-				new_block.hashmerkleroot = data["hashmerkleroot"]
-				new_block.hash = data["hash"]
-				new_block.timestamp = data["timestamp"]
-				new_block.nonce = data["nonce"]
-				blocks.insert(0,new_block)
-				for j,b in enumerate(self.chain.blocks[::-1]):
-					if b.hash == blocks[0].previousHash:
-						self.chain.blocks = self.chain.blocks[:len(self.chain.blocks)-j]
-						self.chain.blocks.extend(blocks)
-						#print(colored("New Node resolved Blockchain conflict\n",'green'))
-						return 1
-
 			
-			#self.chain.lock.release()		chain is released in broadcast/block
+			result = json.loads(json.loads(r.text)["blocks"])
 
+			blocks=[]
+			for i,b in enumerate(result[::-1]):
+				blocks.insert(0,jsonpickle.decode(b))
+				for j,b2 in enumerate(self.chain.blocks[::-1]):
+					if b2.hash == blocks[0].previousHash:
+						self.chain.blocks=self.chain.blocks[:len(self.chain.blocks)-j]
+						self.chain.blocks.extend(blocks)
+						return 1
 
 		return 1
