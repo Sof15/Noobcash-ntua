@@ -257,14 +257,18 @@ def get_block():
 
 
 @app.route('/transactions/create', methods=['POST'])
-def get_transactions():
+def create_transactions():
 	#print("Getting data to make a new transaction...\n")
 	while new_node.conflict:
 		pass
-	new_node.create_transaction(new_node.ring[int(request.form["receiver_id"])]["key"].encode(),int(request.form["amount"]))
-	response = {'transactions': 1}
-	return jsonify(response), 200
-
+	try:
+		print(request.form)
+		result = new_node.create_transaction(new_node.ring[int(request.form["receiver_id"])]["key"].encode(),int(request.form["amount"]))
+		return jsonify({'status':result}), 200
+	except:
+		except_str = "\nInvalid recipient id. Try a number in the range [0,"+str(len(new_node.ring)-1)+ "]\n"
+		return jsonify({'except':except_str}), 500
+	
 
 @app.route('/transactions/view', methods=['GET'])
 def view_transactions():
