@@ -33,12 +33,13 @@ class node:
 		self.ring = []
 		self.current_block = None 
 		self.current_lock = threading.Lock()
-		self.tx_lock = threading.Lock()
+		self.utxo_lock = threading.Lock()
 		self.list_lock = threading.Lock()
 		self.lengths_lock = threading.Lock()
 		self.lengths = []
 		self.tx_list = []
 		self.conflict = False
+		self.times = 0
 		
 		
 		if is_bootstrap:
@@ -117,6 +118,7 @@ class node:
 			data["id"] = id_to_give			
 			data["utxo"] = json.dumps(self.utxo)
 			data["blocks"] = json.dumps(self.chain.to_dict())
+			data["current_block"] = json.dumps(self.current_block.to_dict())
 			
 			url = "http://"+ip+":"+str(port)+"/data/get"
 			#print("Bootstrap posting blockchain,id,utxos to new node at URL:",url,"\n")
@@ -207,7 +209,7 @@ class node:
 	def validate_transaction(self,tx):
 		# use of signature and NBCs balance
 		# and check tx inputs/outputs for enough NBCs
-		self.tx_lock.acquire()
+		self.utxo_lock.acquire()
 		#print("Validating broadcasted transaction...\n")
 		found = True
 		for utxo_in in tx.transaction_inputs:
@@ -256,10 +258,10 @@ class node:
 						print("owner",i)
 			print("TOTAL:",colored(total,'yellow'))
 			'''
-			self.tx_lock.release()
+			self.utxo_lock.release()
 			return 1
 		else: 
-			self.tx_lock.release()
+			self.utxo_lock.release()
 			return 0
 
 	def balance(self,recipient,utxo_list):
@@ -274,6 +276,7 @@ class node:
 		self.current_block.listOfTransactions.append(tx)
 		self.current_block.hashmerkleroot = self.current_block.MerkleRoot()
 		self.current_block.hash = self.current_block.myHash(difficulty_bits)
+		
 		'''
 		b = self.current_block
 		print("...............CURRENT BLOCK....................")
@@ -313,7 +316,7 @@ class node:
 		#nonce is a 32-bit number appended to the header. the whole string is being hashed repeatedly until
 		#the hash result starts with difficulty number of zeros
 		#header of block without nonce
-		#print("BLOCK HASH BEFORE MINING:",block.hash)
+		##print("BLOCK HASH BEFORE MINING:",block.hash)
 		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
 		for nonce in range(block.nonce,2**32):
@@ -395,13 +398,14 @@ class node:
 		return 1
 
 	
-	def get_lengths(self,x,url):
+	def get_lengths(self,data,url):
 		while(1):
 			try:
-				r = requests.post(url)
+				r = requests.post(url,data)
 				if r.status_code == 200:
 					self.lengths_lock.acquire()
 					self.lengths.append({"length":json.loads(r.text)["length"],"id":json.loads(r.text)["id"], "conflict":json.loads(r.text)["conflict"]})
+					#print("---------------------------------------------------------------------",self.lengths)
 					self.lengths_lock.release()
 					return 1 
 			except Exception as e:
@@ -411,52 +415,74 @@ class node:
 
 	def resolve_conflicts(self,difficulty_bits):
 		#resolve correct chain
-		
-		data = {"address": self.ring[self.id]["address"]}
 		#self.chain.lock.acquire()	#exei klidothei sto broadcast block ap opou kaleitai
-		
-		threads = []
-		self.lengths = []
-		for i in range(len(self.ring)):
-			if i != self.id:
-				url = "http://" + self.ring[i]["address"] + "/blockchain/length"
-				thread = threading.Thread(target=self.get_lengths,args=(1,url))
-				thread.start()
-				threads.append(thread)
-		
-		for thread in threads:
-			thread.join()
-	
-		s = 0
-		for length in self.lengths:
-			s += length["conflict"]
-		
-		if s == 4 :
-			self.lengths.append({"length":len(self.chain.blocks),"id":self.id,"conflict":True})
-		else:
-			self.lengths = [length for length in self.lengths if length["conflict"] == False]
 
+		data = {}
+		data["address"] = self.ring[self.id]["address"]
 
-		self.lengths = sorted(self.lengths,key=lambda k: k["length"],reverse=True)
-		#print(lengths)
+		count = 0
+		while(count<10):
+			threads = []
+			self.lengths = []
+			for i in range(len(self.ring)):
+				if i != self.id:
+					url = "http://" + self.ring[i]["address"] + "/blockchain/length"
+					thread = threading.Thread(target=self.get_lengths,args=(data,url))
+					thread.start()
+					threads.append(thread)
+			
+			for thread in threads:
+				thread.join()
+			count+=1
+		
+			s = 0
+			for length in self.lengths:
+				s += length["conflict"]
+			
+			if s == 4 :
+				self.lengths.append({"length":len(self.chain.blocks),"id":self.id,"conflict":True})
+				self.lengths = sorted(self.lengths,key=lambda k: k["length"],reverse=True)
+				#print(colored("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------",'red'))
+				#print(colored("-----------------------------------------------------------------------------EVERYONE IS IN CONFLICT---------------------------------------------------------------------",'red'))
+				#print(colored("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------",'red'))
+				break
+			else:
+				self.lengths = [length for length in self.lengths if length["conflict"] == False]
+				self.lengths = sorted(self.lengths,key=lambda k: k["length"],reverse=True)
+				if self.lengths[0]["length"] > len(self.chain.blocks):
+					break
+
+		
+		#print(self.lengths)
 		idxs = [int(length["id"]) for length in self.lengths if length["length"] == self.lengths[0]["length"]]
 		idx = min(idxs)
 		
-		
-		if idx != self.id:
+		if idx == self.id:
+			self.utxo_lock.acquire()
+			for i in range(len(self.utxo)):
+				for tx in self.current_block.listOfTransactions:
+					if self.utxo[i]["previous_trans_id"] == tx.transaction_id:
+						self.utxo[i]["recipient"] = tx.sender_address.decode()
+						break
+
+			self.utxo_lock.release()
+			self.times = 4
+
+
+		else:
 			url = "http://" + self.ring[idx]["address"] + "/blockchain/request"
 			while(1):
 				try:
 					#print("Asking blockchain from URL:",url)
-					r = requests.post(url)
+					r = requests.post(url)#,data)
 					if r.status_code == 200:
 						break
 				except Exception as e:
 					time.sleep(2)
 		
-			self.tx_lock.acquire()
+			self.utxo_lock.acquire()
 			self.utxo = json.loads(r.json()["utxo"])
-			self.tx_lock.release()
+			self.utxo_lock.release()
 
 			blocks = []
 			for i,data in enumerate(json.loads(r.json()["blocks"])[::-1]):
@@ -477,7 +503,6 @@ class node:
 					if b.hash == blocks[0].previousHash:
 						self.chain.blocks = self.chain.blocks[:len(self.chain.blocks)-j]
 						self.chain.blocks.extend(blocks)
-						#print("REPLACED THE LAST ",j,"BLOCKS\n")
 						#print(colored("New Node resolved Blockchain conflict\n",'green'))
 						return 1
 
