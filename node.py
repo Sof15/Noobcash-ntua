@@ -17,11 +17,9 @@ from termcolor import colored
 import jsonpickle
 import hashlib
 
-N = 10
-
 
 class node:
-	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
+	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000,N):
 		
 		#print("Initializing Node")
 		self.id = 0	
@@ -42,6 +40,7 @@ class node:
 		self.num_of_minings = 0
 		self.total_mining_time = 0
 		self.added_lock = threading.Lock()
+		self.N=N
 		
 		
 		if is_bootstrap:
@@ -78,11 +77,11 @@ class node:
 	def create_genesis_block(self,difficulty,capacity):
 		if self.id==0 :
 			sender = "0".encode()
-			first_trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*N,[])
+			first_trans = transaction.Transaction( self.wallet.public_key, self.wallet.private_key, self.wallet.public_key, 100*self.N,[])
 			
 			rand_id = uuid.uuid1()
 			
-			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':100*N, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
+			first_utxo = {'id': first_trans.transaction_id + "0", 'amount':100*self.N, 'previous_trans_id': -1, 'recipient': self.wallet.public_key.decode()} # isos thelei public key anti gia id 
 			self.utxo.append(first_utxo)
 			self.current_block = block.Block(0, '1',[] ,difficulty)
 			self.add_transaction_to_block(first_trans,capacity,difficulty)
@@ -129,8 +128,8 @@ class node:
 				except Exception as e:
 					time.sleep(2)
 
-			if (len(self.ring)==N):
-				for i in range(1,N):
+			if (len(self.ring)==self.N):
+				for i in range(1,self.N):
 					url = "http://"+self.ring[i]["address"]+"/broadcast/ring"
 					#print("Broadcasting ring....\n")
 					data = {}

@@ -23,6 +23,8 @@ parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 parser.add_argument('c', type=int, help='block capacity')
 parser.add_argument('d', type=int, help='difficulty in hex digits')
+parser.add_argument('N', type=int, help='number of nodes')
+
 args = parser.parse_args()
 
 difficulty_bits = args.d * 4 #4,5 hex ->  16,20 bin
@@ -30,7 +32,7 @@ capacity = args.c #10,1,5
 txs = []
 txs_lock = threading.Lock()
 
-new_node = node.node(args.boot,args.ip,args.port)
+new_node = node.node(args.boot,args.ip,args.port,args.N)
 
 if args.boot:
 	new_node.create_genesis_block(difficulty_bits,capacity)	
