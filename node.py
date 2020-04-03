@@ -147,6 +147,11 @@ class node:
 			return r
 
 	def create_transaction(self, receiver, amount):
+		if self.wallet.public_key == receiver:
+			raise Exception("Recipient can't be the same with sender.")
+		if amount <= 0:
+			raise Exception("Amount το be transfered can't be less or equal to 0.")
+		
 		trans_in = []
 		total = 0 
 		for utxo in self.utxo:

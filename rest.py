@@ -80,8 +80,8 @@ def get_data():
 		#print(colored("New Node unable to validate broadcasted Blockchain\n",'red'))
 
 	new_node.id = int(request.form["id"])	
-	#new_node.current_block = jsonpickle.decode(request.form["current_block"])
-	new_node.current_block = new_node.create_new_block(difficulty_bits,[])
+	new_node.current_block = jsonpickle.decode(request.form["current_block"])
+	#new_node.current_block = new_node.create_new_block(difficulty_bits,[])
 	new_node.utxo = json.loads(request.form["utxo"])
 	#print(colored("New node got ID = " + str(request.form["id"])+"\n",'green'))
 	response = {'status': 200}
@@ -137,7 +137,7 @@ def get_new_transaction():
 	
 	#print("Getting transaction from broadcasting....",colored("AMOUNT: " + str(new_tx.amount),'yellow'),"\n")
 	
-	'''
+	
 	new_node.list_lock.acquire()
 	if not new_node.tx_list or new_tx.timestamp > new_node.tx_list[-1].timestamp:
 		new_node.tx_list.append(new_tx)
@@ -147,14 +147,14 @@ def get_new_transaction():
 			i+=1
 		new_node.tx_list.insert(i,new_tx)
 	
-	for i,tx in enumerate(new_node.tx_list):
+	#for i,tx in enumerate(new_node.tx_list):
 		#print("TX",i,":",tx.timestamp, "|", tx.transaction_id)
 	new_node.list_lock.release()
 	
 	time.sleep(0.5)
 	new_node.list_lock.acquire()
 	new_tx = new_node.tx_list.pop(0)
-	'''
+	
 	res = []
 	new_node.utxo_lock.acquire()
 	if new_node.validate_transaction(new_tx):
@@ -165,7 +165,7 @@ def get_new_transaction():
 	else:
 		new_node.utxo_lock.release()
 		#print(colored("Unable to validate Transaction.\n",'red'))
-	#new_node.list_lock.release()
+	new_node.list_lock.release()
 
 	response = {'outputs': res}
 	return jsonify(response), 200
@@ -245,9 +245,9 @@ def create_transactions():
 	try:
 		result = new_node.create_transaction(new_node.ring[int(request.form["receiver_id"])]["key"].encode(),int(request.form["amount"]))
 		return jsonify({'status':result}), 200
-	except:
-		except_str = "\nInvalid recipient id. Try a number in the range [0,"+str(len(new_node.ring)-1)+ "]\n"
-		return jsonify({'except':except_str}), 500
+	except Exception as e:
+		#except_str = "\n\tInvalid recipient id. Try a number in the range [0,"+str(len(new_node.ring)-1)+ "]\n"
+		return jsonify({'except':"\n\t"+e.args[0]}), 500
 	
 
 @app.route('/transactions/view', methods=['GET'])
@@ -260,14 +260,15 @@ def view_transactions():
     	response={}
     	for i,r in enumerate(new_node.ring):
     		if r["key"]==trans.receiver_address.decode():
-    			#print(i)
+    			print(i)
     			response["receiver_id"] = i
     		if r["key"]==trans.sender_address.decode():
-    			#print(i)
+    			print(i)
     			response["sender_id"] = i
     	response["amount"] = trans.amount
+    	#response["output"] = trans.transaction_outputs
     	response_list.append(response)
-    #print(response_list)
+    print(response_list)
     response = {'transactions': response_list}
 
     return jsonify(response), 200
