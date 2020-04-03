@@ -12,6 +12,7 @@ import json
 import threading
 import logging 
 from termcolor import colored
+import jsonpickle
 
 app = Flask(__name__)
 CORS(app)
@@ -22,7 +23,7 @@ parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
 args = parser.parse_args()
 
-difficulty_bits = 4	 #4,5
+difficulty_bits = 16 #4,5
 capacity = 	1 #10,1,5
 txs = []
 txs_lock = threading.Lock()
@@ -33,8 +34,6 @@ if args.boot:
 	new_node.create_genesis_block(difficulty_bits,capacity)	
 
 #.......................................................................................
-
-#source : https://networklore.com/start-task-with-flask/
 
 def start_register():
 	while(1):
@@ -50,8 +49,6 @@ def start_register():
 		time.sleep(2)
 
 	
-    
-
 @app.route('/node_info', methods=['GET'])
 def info():
     response = {'ID': new_node.id,"Ring:":new_node.ring}
@@ -71,22 +68,9 @@ def register_node():
 
 @app.route('/data/get', methods=['POST'])
 def get_data():
-	chain=blockchain.Blockchain()
 
-	for i,data in enumerate(json.loads(request.form["blocks"])):
-		trans = []
-		for tx in json.loads(data["listOfTransactions"]):
-			trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-			trans[-1].signature = tx["signature"].encode('latin-1')
-			trans[-1].transaction_id = tx["hash"]
-			trans[-1].outputs = json.loads(tx["outputs"])
-			trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-		new_block = block.Block(i,data["previousHash"],trans,difficulty_bits)
-		new_block.hashmerkleroot = data["hashmerkleroot"]
-		new_block.hash = data["hash"]
-		new_block.timestamp = data["timestamp"]
-		new_block.nonce = data["nonce"]
-		chain.add_block(new_block)
+	chain=blockchain.Blockchain()
+	chain.blocks=jsonpickle.decode(request.form["blocks"])
 
 
 	if new_node.validate_chain(chain,difficulty_bits):
@@ -95,26 +79,8 @@ def get_data():
 	#else:
 		#print(colored("New Node unable to validate broadcasted Blockchain\n",'red'))
 
-	new_node.id = int(request.form["id"])
-	
-
-	data = json.loads(request.form["current_block"])
-	trans = []
-	for tx in json.loads(data["listOfTransactions"]):
-		trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-		trans[-1].signature = tx["signature"].encode('latin-1')
-		trans[-1].transaction_id = tx["hash"]
-		trans[-1].outputs = json.loads(tx["outputs"])
-		trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-	new_block = block.Block(len(new_node.chain.blocks),data["previousHash"],trans,difficulty_bits)
-	new_block.hashmerkleroot = data["hashmerkleroot"]
-	new_block.hash = data["hash"]
-	new_block.timestamp = data["timestamp"]
-	new_block.nonce = data["nonce"]
-	
-	new_node.current_block = new_block
-
-	#new_node.current_block = new_node.create_new_block(difficulty_bits,[])
+	new_node.id = int(request.form["id"])	
+	new_node.current_block = jsonpickle.decode(request.form["current_block"])
 	new_node.utxo = json.loads(request.form["utxo"])
 	#print(colored("New node got ID = " + str(request.form["id"])+"\n",'green'))
 	response = {'status': 200}
@@ -145,7 +111,8 @@ def give_blockchain():
 	new_node.chain.lock.acquire()	
 
 	data = {}
-	data["blocks"] = json.dumps(new_node.chain.to_dict())
+	temp = [b.serialize() for b in new_node.chain.blocks]
+	data["blocks"]=json.dumps(temp)
 	new_node.utxo_lock.acquire()
 	data["utxo"] = json.dumps(new_node.utxo)
 	new_node.utxo_lock.release()
@@ -165,19 +132,14 @@ def get_ring():
 
 @app.route('/broadcast/transaction', methods=['POST'])
 def get_new_transaction():
-	#print("Getting transaction from broadcasting....",colored("AMOUNT: " + str(request.form["amount"]),'yellow'),"\n")
 
 	while(new_node.conflict):
 		pass
 	
-	new_tx = transaction.Transaction(request.form["sender_address"].encode(),None,request.form["receiver_address"].encode(),int(request.form["amount"]),request.form["inputs"])
-	new_tx.signature = request.form["signature"].encode('latin-1')
-	new_tx.transaction_id = request.form["hash"]
-	new_tx.temp_id = request.form["temp_id"].encode('latin-1')
-	new_tx.transaction_inputs = json.loads(request.form["inputs"])
-	new_tx.transaction_outputs = json.loads(request.form["outputs"])
+	new_tx = jsonpickle.decode(request.form["transaction"])
 	new_tx.timestamp = float(request.form["time"])
 	
+	#print("Getting transaction from broadcasting....",colored("AMOUNT: " + str(new_tx.amount),'yellow'),"\n")
 	
 	new_node.list_lock.acquire()
 	if not new_node.tx_list or new_tx.timestamp > new_node.tx_list[-1].timestamp:
@@ -212,16 +174,17 @@ def get_new_transaction():
 def get_block():
 	
 	#adding the first of the broadcasted blocks to blockchain after validating
-	#print("Getting block from broadcasting.... BLOCK ID:",request.form["index"],colored("AMOUNT: " + str(json.loads(request.form["listOfTransactions"])[-1]["amount"])+"\n",'yellow'))
 	
+	new_block=jsonpickle.decode(request.form["block"])
+	#print("Getting block from broadcasting.... BLOCK ID:",new_block.index,colored("AMOUNT: " + str(new_block.listOfTransactions[-1].amount)+"\n",'yellow'))
 	#check if the block has already been broadcasted by another miner
-	temp = [tx["hash"] for tx in json.loads(request.form["listOfTransactions"])]
+	temp = [tx.transaction_id for tx in new_block.listOfTransactions]
 	if (len(new_node.chain.blocks)-1)*capacity > 5:
 		txs_lock.acquire()
 		for tx_hash in temp:
 			if tx_hash in txs[::-1]:
 				txs_lock.release()
-				##print(colored("Block ID: "+ request.form["index"]+" already delivered by another miner!\n",'red'))
+				##print(colored("Block ID: "+ str(new_block.index) +" already delivered by another miner!\n",'red'))
 				#print(colored("Transaction ID: " + tx_hash + " already delivered by another miner!\n",'red'))
 				response = {'t': 1}
 				return jsonify(response), 200
@@ -235,37 +198,12 @@ def get_block():
 
 	new_node.chain.lock.acquire()
 
-	if int(request.form["index"]) in [b.index for b in new_node.chain.blocks]:
-		#print(colored("Block with id "+request.form["index"]+" rejected.\n",'red'))
+	if new_block.index in [b.index for b in new_node.chain.blocks]:
+		#print(colored("Block with id "+str(new_block.index)+" rejected.\n",'red'))
 		new_node.chain.lock.release()
 		response = {'t': 1}
 		return jsonify(response), 200
-	'''
-	in_chain = False
-	temp = [tx["hash"] for tx in json.loads(request.form["listOfTransactions"])]
-	for t in temp:
-		for b in new_node.chain.blocks[::-1]:
-			for tr in b.listOfTransactions:
-				if t == tr.transaction_id:
-					in_chain = True
-					break
-			if in_chain:
-				break
 	
-	if not in_chain:
-	'''
-	trans = []
-	for tx in json.loads(request.form["listOfTransactions"]):
-		trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-		trans[-1].signature = tx["signature"].encode('latin-1')
-		trans[-1].transaction_id = tx["hash"]
-		trans[-1].outputs = json.loads(tx["outputs"])
-		trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-	new_block = block.Block(int(request.form["index"]), request.form["previousHash"], trans,difficulty_bits)
-	new_block.hash = request.form["hash"]
-	new_block.nonce = request.form["nonce"]
-	new_block.timestamp = request.form["timestamp"]
-	new_block.hashmerkleroot = request.form["hashmerkleroot"] 
 	#print("Validating broadcasted block...\n")
 	if new_node.validate_block(new_block,difficulty_bits,new_node.chain):
 		new_node.chain.add_block(new_block)
@@ -286,7 +224,7 @@ def get_block():
 			print("transaction hash",tx.transaction_id)
 	
 	#else:
-		#print(colored("Block with id "+request.form["index"]+" rejected.\n",'red'))
+		#print(colored("Block with id "+str(new_block.index)+" rejected.\n",'red'))
 	'''
 	new_node.chain.lock.release()
 	response = {'t': 1}
@@ -308,8 +246,25 @@ def create_transactions():
 
 @app.route('/transactions/view', methods=['GET'])
 def view_transactions():
+    global new_node
+    response_list=[]
+    
     last_block = new_node.chain.blocks[-1]
-    response = {'transactions': json.loads(last_block.to_dict()["listOfTransactions"])}
+    for trans in last_block.listOfTransactions:
+    	response={}
+    	for i,r in enumerate(new_node.ring):
+
+    		if r["key"]==trans.receiver_address.decode():
+    			print(i)
+    			response["receiver_id"] = i
+    		if r["key"]==trans.sender_address.decode():
+    			print(i)
+    			response["sender_id"] = i
+    	response["amount"] = trans.amount
+    	response_list.append(response)
+
+    response = {'transactions': response_list}
+
     return jsonify(response), 200
 
 @app.route('/balance/view', methods=['GET'])

@@ -7,8 +7,9 @@ def make_transactions_from_file(sender,file):
 	def read_and_post():
 		f = open("transactions/5nodes/"+file, "r")
 		#f = open(file, "r")
+		count=1
 		for line in f.readlines():
-			print(line)
+			#print(line)
 			line = line.split()
 			receiver_id = line[0][2:]
 			amount = line[1]
@@ -22,7 +23,8 @@ def make_transactions_from_file(sender,file):
 			port = "500"+str(sender)
 
 			url = ip+":"+port+"/transactions/create"
-			print("Posting new transaction data to Node number "+str(sender)+"\n")
+			print("Transaction number",count,"of Node number",sender,"\n")
+			count+=1
 			while(1):
 				try:
 					r = requests.post(url,data)

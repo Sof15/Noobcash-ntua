@@ -9,9 +9,10 @@ import transaction
 import time
 import threading
 import logging 
+import jsonpickle
 
 
-class Blockchain():
+class Blockchain(object):
 	def __init__(self,):
 		self.blocks = [] #list of validated blocks
 		self.lock = threading.Lock()
@@ -21,8 +22,14 @@ class Blockchain():
 		#add validated block to list
 		self.blocks.append(block)
 
+	"""
 	def to_dict(self):
 		temp_list = []
 		for block in self.blocks:
 			temp_list.append(block.to_dict())
 		return temp_list
+	"""
+
+	def serialize(self):
+		temp = jsonpickle.encode(self.blocks)
+		return temp

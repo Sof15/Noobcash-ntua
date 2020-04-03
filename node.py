@@ -14,8 +14,11 @@ import uuid
 import threading
 import copy
 from termcolor import colored
+import jsonpickle
+import hashlib
 
 N = 5
+
 
 class node:
 	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000):
@@ -39,7 +42,8 @@ class node:
 		self.lengths = []
 		self.tx_list = []
 		self.conflict = False
-		self.times = 0
+		self.found_idx = 0
+		self.found_nonce = False
 		
 		
 		if is_bootstrap:
@@ -117,8 +121,8 @@ class node:
 			data = {}
 			data["id"] = id_to_give			
 			data["utxo"] = json.dumps(self.utxo)
-			data["blocks"] = json.dumps(self.chain.to_dict())
-			data["current_block"] = json.dumps(self.current_block.to_dict())
+			data["blocks"] = self.chain.serialize()
+			data["current_block"] = self.current_block.serialize()
 			
 			url = "http://"+ip+":"+str(port)+"/data/get"
 			#print("Bootstrap posting blockchain,id,utxos to new node at URL:",url,"\n")
@@ -185,8 +189,10 @@ class node:
 
 
 	def broadcast_transaction(self,transaction,url,start):
-		data = transaction.to_dict()
+		data={}
+		data["transaction"] = transaction.serialize()
 		data["time"] = start
+
 		while(1):
 			try:
 				r = requests.post(url,data)
@@ -293,11 +299,8 @@ class node:
 			#print("Current block full! Creating new current block...\n")
 			if self.current_block.index != 0 :
 				#print("Mining full Block...\n")
-				hash_result,nonce = self.mine_block(self.current_block,difficulty_bits)
-				if hash_result == 0:
-					return 0
-				self.current_block.hash = hash_result
-				self.current_block.nonce = nonce
+				self.mine_block(difficulty_bits)
+				
 			else:
 				self.chain.lock.acquire()
 				self.chain.add_block(self.current_block)
@@ -311,43 +314,44 @@ class node:
 		return 1
 
 
-
-	def mine_block(self,block,difficulty_bits):
+	def mine_block(self,difficulty_bits):
 		#nonce is a 32-bit number appended to the header. the whole string is being hashed repeatedly until
 		#the hash result starts with difficulty number of zeros
 		#header of block without nonce
-		##print("BLOCK HASH BEFORE MINING:",block.hash)
-		header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits)
+		start = time.time()
+		header = str(self.current_block.index) + str(self.current_block.previousHash) + self.current_block.hashmerkleroot + str(self.current_block.timestamp) + str(difficulty_bits)
 		#trying to find the nonce number 32 bits --> 2**32-1 max nonce number
-		for nonce in range(block.nonce,2**32):
-			hash_result = SHA256.new((header+str(nonce)).encode()).hexdigest()
+		for nonce in range(2**32):
+			hash_result = hashlib.sha256((header+str(nonce)).encode()).hexdigest()
 			if self.valid_proof(hash_result,difficulty_bits):
 				#print (colored("Success with nonce: " + str(nonce),'green'))
+				#print("Mining took",time.time()-start,"sec")
 				#print ("Block Hash is",hash_result,"\n")
-				block.hash = hash_result
-				block.nonce = nonce
+				self.current_block.hash = hash_result
+				self.current_block.nonce = nonce
 				
 				
 				threads = []
 				
 				for i in range(len(self.ring)):
 					url = "http://" + self.ring[i]["address"] + "/broadcast/block"
-					thread = threading.Thread(target=self.broadcast_block,args = (block,url))
+					thread = threading.Thread(target=self.broadcast_block,args = (self.current_block,url))
 					thread.start()
 					threads.append(thread)
 				
 				for t in threads:
 					t.join()
 				
-				
-				return hash_result, nonce
+				return 1
 
 		#print (colored("Failed after " +str(2**32-1) +" tries\n",'red'))
-		return 0,0
+		return 0
+
 
 
 	def broadcast_block(self,block,url):
-		data = block.to_dict()
+		data={}
+		data["block"] = block.serialize()
 		data["sender"]=self.id
 		#print("Broadcasting Mined Block with id",block.index,"at URL:",url,"\n")
 		while(1):
@@ -371,7 +375,7 @@ class node:
 		#validate every new block except for genesis block
 		if block.index != 0:
 			header = str(block.index) + str(block.previousHash) + block.hashmerkleroot + str(block.timestamp) + str(difficulty_bits) + str(block.nonce)
-			h = SHA256.new(header.encode()).hexdigest()
+			h = hashlib.sha256(header.encode()).hexdigest()
 			if block.index > len(chain.blocks):
 				idx = -1
 			else:
@@ -484,30 +488,16 @@ class node:
 			self.utxo = json.loads(r.json()["utxo"])
 			self.utxo_lock.release()
 
-			blocks = []
-			for i,data in enumerate(json.loads(r.json()["blocks"])[::-1]):
-				trans = []
-				for tx in json.loads(data["listOfTransactions"]):
-					trans.append(transaction.Transaction(tx["sender_address"].encode(),None,tx["receiver_address"].encode(),tx["amount"],json.loads(tx["inputs"])))
-					trans[-1].signature = tx["signature"].encode('latin-1')
-					trans[-1].transaction_id = tx["hash"]
-					trans[-1].outputs = json.loads(tx["outputs"])
-					trans[-1].temp_id = tx["temp_id"].encode('latin-1')
-				new_block = block.Block(len(json.loads(r.json()["blocks"]))-i-1,data["previousHash"],trans,difficulty_bits)
-				new_block.hashmerkleroot = data["hashmerkleroot"]
-				new_block.hash = data["hash"]
-				new_block.timestamp = data["timestamp"]
-				new_block.nonce = data["nonce"]
-				blocks.insert(0,new_block)
-				for j,b in enumerate(self.chain.blocks[::-1]):
-					if b.hash == blocks[0].previousHash:
-						self.chain.blocks = self.chain.blocks[:len(self.chain.blocks)-j]
-						self.chain.blocks.extend(blocks)
-						#print(colored("New Node resolved Blockchain conflict\n",'green'))
-						return 1
-
 			
-			#self.chain.lock.release()		chain is released in broadcast/block
+			result = json.loads(json.loads(r.text)["blocks"])
 
+			blocks=[]
+			for i,b in enumerate(result[::-1]):
+				blocks.insert(0,jsonpickle.decode(b))
+				for j,b2 in enumerate(self.chain.blocks[::-1]):
+					if b2.hash == blocks[0].previousHash:
+						self.chain.blocks=self.chain.blocks[:len(self.chain.blocks)-j]
+						self.chain.blocks.extend(blocks)
+						return 1
 
 		return 1

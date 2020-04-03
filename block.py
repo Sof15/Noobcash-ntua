@@ -3,11 +3,13 @@ import blockchain
 from datetime import datetime
 import Crypto.Random.random as rnd
 from Crypto.Hash import SHA,SHA256
+import hashlib
 import json
 import threading
 import random
+import jsonpickle
 
-class Block:
+class Block(object):
 	def __init__(self,idx, prev_hash, list_trans,difficulty_bits):
 		self.index = idx
 		self.previousHash = prev_hash  #hash of the previous block header
@@ -20,7 +22,11 @@ class Block:
 		self.hashmerkleroot = self.MerkleRoot()
 		self.hash = self.myHash(difficulty_bits)
 		
-	
+	def serialize(self):
+		temp=jsonpickle.encode(self)
+		return temp
+
+	"""
 	def to_dict(self):
 		data = {}
 		data["index"] = self.index
@@ -34,11 +40,13 @@ class Block:
 		data["hashmerkleroot"] = self.hashmerkleroot
 		data["hash"] = self.hash
 		return data
+	"""
+	
 
 	def myHash(self,difficulty_bits):
 		#calculate self.hash
-		header = str(self.index)+str(self.previousHash) + self.hashmerkleroot + str(self.timestamp)+str(difficulty_bits) #+ str(self.nonce)
-		hash_result = SHA256.new(header.encode()).hexdigest()
+		header = str(self.index)+str(self.previousHash) + self.hashmerkleroot + str(self.timestamp)+str(difficulty_bits)
+		hash_result = hashlib.sha256(header.encode()).hexdigest()
 		return hash_result
 
 
@@ -57,7 +65,7 @@ class Block:
 				self.hashmerkleroot.append(self.hashmerkleroot[-1])
 			j = 0
 			for i in range(0, len(self.hashmerkleroot) - 1,2) :
-				self.hashmerkleroot[j] = SHA256.new(str(self.hashmerkleroot[i] + self.hashmerkleroot[i+1]).encode()).hexdigest()
+				self.hashmerkleroot[j] = hashlib.sha256(str(self.hashmerkleroot[i] + self.hashmerkleroot[i+1]).encode()).hexdigest()
 				j += 1
 
 			delete_last = len(self.hashmerkleroot) - j

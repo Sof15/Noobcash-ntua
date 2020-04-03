@@ -5,15 +5,17 @@ import json
 import Crypto
 import Crypto.Random
 from Crypto.Hash import SHA,SHA256
+import hashlib
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
 import uuid
 import time
 import requests
 from flask import Flask, jsonify, request, render_template
+import jsonpickle
 
 
-class Transaction:
+class Transaction(object):
 
     def __init__(self,sender_address, sender_private_key, recipient_address, value, trans_in):
         self.sender_address = sender_address #: To public key του wallet από το οποίο προέρχονται τα χρήματα
@@ -22,12 +24,16 @@ class Transaction:
         self.transaction_inputs = trans_in #: λίστα από Transaction Input 
         self.transaction_outputs = [] #: λίστα από Transaction Output 
         self.temp_id = uuid.uuid1().bytes
-        h = SHA256.new(self.temp_id)
-        self.transaction_id = h.hexdigest() #: το hash του transaction
+        self.transaction_id = SHA256.new(self.temp_id).hexdigest() #: το hash του transaction
         if (sender_private_key): 
             self.signature = self.sign_transaction(sender_private_key)
         self.timestamp = time.time()
 
+    def serialize(self):    
+        temp = jsonpickle.encode(self)
+        return temp
+
+    """
     def to_dict(self):
         #create dictionary of transaction's data for broadcasting
         tx_data = {}
@@ -40,6 +46,7 @@ class Transaction:
         tx_data["outputs"] = json.dumps(self.transaction_outputs)
         tx_data["temp_id"] = self.temp_id.decode('latin-1')
         return tx_data
+    """
 
     def sign_transaction(self,sender_private_key):
 
