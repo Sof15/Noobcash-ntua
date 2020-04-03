@@ -19,7 +19,7 @@ import hashlib
 
 
 class node:
-	def __init__(self, is_bootstrap, ip="192.168.1.1",port=5000,N):
+	def __init__(self, is_bootstrap, N, ip="192.168.1.1",port=5000):
 		
 		#print("Initializing Node")
 		self.id = 0	

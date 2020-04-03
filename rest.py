@@ -32,7 +32,7 @@ capacity = args.c #10,1,5
 txs = []
 txs_lock = threading.Lock()
 
-new_node = node.node(args.boot,args.ip,args.port,args.N)
+new_node = node.node(args.boot,args.N,args.ip,args.port)
 
 if args.boot:
 	new_node.create_genesis_block(difficulty_bits,capacity)	
