@@ -17,7 +17,7 @@ from termcolor import colored
 import jsonpickle
 import hashlib
 
-N = 5
+N = 10
 
 
 class node:

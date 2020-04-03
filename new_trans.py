@@ -6,8 +6,8 @@ from termcolor import colored
 from pyfiglet import Figlet
 import json
 
-def read_and_post(file,sender):
-	f = open("transactions/5nodes/"+file, "r")
+def read_and_post(file,sender,num_nodes):
+	f = open("transactions/"+str(num_nodes)+"nodes/"+file, "r")
 	#f = open(file, "r")
 	count=1
 	for line in f.readlines():
@@ -25,10 +25,11 @@ def read_and_post(file,sender):
 		data = {}
 		data["receiver_id"] = receiver_id
 		data["amount"] = amount
-		
+		print("receiver",receiver_id)
+		print("sender",sender)		
 		# edw na ftiaxoume th swsth ip otan ginei apo ta vm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		#ip="http://127.0.0.1"
-		ip="http://192.168.1."+str(int(sender)+1)
+		ip="http://192.168.1."+str((int(sender)%5)+1)
 		port = "500"+sender
 
 		url = ip+":"+port+"/transactions/create"
@@ -47,13 +48,13 @@ if __name__ == '__main__':
 
 	c_lock=threading.Lock()
 	c=0
-
+	num_nodes=len(sys.argv[1:])
 	start=time.time()
 	
 	threads=[]
 	for file in sys.argv[1:]:
 		sender=file[-5][0] 
-		thread = threading.Thread(target=read_and_post, args=(file,sender))
+		thread = threading.Thread(target=read_and_post, args=(file,sender,num_nodes))
 		thread.start()
 		threads.append(thread)
 
@@ -61,7 +62,7 @@ if __name__ == '__main__':
 		t.join()
 
 	total_time=time.time()-start
-	throughput=total_time/c
+	throughput=c/total_time
 	total_time=time.strftime("%M:%S", time.localtime(total_time))
 
 
@@ -70,7 +71,7 @@ if __name__ == '__main__':
 
 	time.sleep(5)
 	for i in range(len(sys.argv[1:])):
-		ip = "192.168.1."+str(i+1)
+		ip = "192.168.1."+str((i%5)+1)
 		#ip = "127.0.0.1"
 		port = "500"+str(i)
 		url = "http://"+ip+":"+port+"/mining/stats"

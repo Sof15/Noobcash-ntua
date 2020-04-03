@@ -14,7 +14,7 @@ class balance:
 		parser = argparse.ArgumentParser()
 		parser.add_argument('--port', type=str, required=True)
 		args = parser.parse_args(sys.argv[2:])
-		url = "http://0.0.0.0:{}/balance/view".format(args.port)
+		url = "http://192.168.1.{}:{}/balance/view".format(str(int(args.port[3])+1),args.port)
 		while(1):
 			try:
 				r = requests.get(url)

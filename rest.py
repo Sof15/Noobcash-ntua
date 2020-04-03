@@ -21,10 +21,12 @@ parser = ArgumentParser()
 parser.add_argument('boot', type=int, help='if the current node is the bootstrap enter 1, oterwise enter 0')
 parser.add_argument('ip',  type=str, help='host of the current node')
 parser.add_argument('port', type=int, help='port to listen to')
+parser.add_argument('c', type=int, help='block capacity')
+parser.add_argument('d', type=int, help='difficulty in hex digits')
 args = parser.parse_args()
 
-difficulty_bits = 16 #4,5 hex ->  16,20 bin
-capacity = 	10 #10,1,5
+difficulty_bits = args.d * 4 #4,5 hex ->  16,20 bin
+capacity = args.c #10,1,5
 txs = []
 txs_lock = threading.Lock()
 
@@ -247,6 +249,7 @@ def create_transactions():
 		return jsonify({'status':result}), 200
 	except Exception as e:
 		#except_str = "\n\tInvalid recipient id. Try a number in the range [0,"+str(len(new_node.ring)-1)+ "]\n"
+		print(str(e))
 		return jsonify({'except':"\n\t"+e.args[0]}), 500
 	
 
