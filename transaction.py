@@ -60,3 +60,4 @@ class Transaction(object):
         signature = signer.sign(h)
         return signature
         
+        

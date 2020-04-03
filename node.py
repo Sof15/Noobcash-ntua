@@ -197,6 +197,8 @@ class node:
 			try:
 				r = requests.post(url,data)
 				if r.status_code == 200:
+					transaction.transaction_outputs = r.json()["outputs"]
+					#print(transaction.transaction_outputs)
 					break
 			except Exception as e:
 				time.sleep(2)
@@ -251,6 +253,7 @@ class node:
 			if change_utxo["amount"] != 0:
 				self.utxo.append(change_utxo)
 			self.utxo.append(recipient_utxo)
+			tx.transaction_outputs.append(recipient_utxo)
 
 			'''
 			print(colored("Transaction Validated!\n",'green'))

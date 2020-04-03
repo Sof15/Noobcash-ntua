@@ -158,15 +158,17 @@ def get_new_transaction():
 	new_node.list_lock.acquire()
 	new_tx = new_node.tx_list.pop(0)
 	
-
+	res = []
 	if new_node.validate_transaction(new_tx):
+
+		res = new_tx.transaction_outputs
 		new_node.add_transaction_to_block(new_tx,capacity,difficulty_bits)
 		#print(colored("Added broadcasted transaction to current block!\n",'green'))
 	#else:
 		#print(colored("Unable to validate Transaction.\n",'red'))
 	new_node.list_lock.release()
 
-	response = {'t': 1}
+	response = {'outputs': res}
 	return jsonify(response), 200
 
 
@@ -193,6 +195,10 @@ def get_block():
 
 		txs_lock.release()
 
+	'''for tx in new_block.listOfTransactions:
+					new_node.validate_transaction(tx)'''
+			
+
 	while(new_node.conflict):
 		pass
 
@@ -212,20 +218,20 @@ def get_block():
 		
 	#else:
 		#print(colored("Unable to validate broadcasted block.\n",'red'))
-	'''
-	for b in new_node.chain.blocks:
-		print("..................BLOCK....................")
-		print("index",b.index)
-		print("block hash", b.hash)
-		print("previous hash",b.previousHash)
-		print("block sender", request.form["sender"],"\n")
-		for tx in b.listOfTransactions:
-			print(colored("amount: " + str(tx.amount),'yellow'))
-			print("transaction hash",tx.transaction_id)
+	
+	'''for b in new_node.chain.blocks:
+					print("..................BLOCK....................")
+					print("index",b.index)
+					print("block hash", b.hash)
+					print("previous hash",b.previousHash)
+					print("block sender", request.form["sender"],"\n")
+					for tx in b.listOfTransactions:
+						print(colored("amount: " + str(tx.amount),'yellow'))
+						print("transaction hash",tx.transaction_id)'''
 	
 	#else:
 		#print(colored("Block with id "+str(new_block.index)+" rejected.\n",'red'))
-	'''
+	
 	new_node.chain.lock.release()
 	response = {'t': 1}
 	return jsonify(response), 200
@@ -253,7 +259,6 @@ def view_transactions():
     for trans in last_block.listOfTransactions:
     	response={}
     	for i,r in enumerate(new_node.ring):
-
     		if r["key"]==trans.receiver_address.decode():
     			print(i)
     			response["receiver_id"] = i
@@ -261,8 +266,9 @@ def view_transactions():
     			print(i)
     			response["sender_id"] = i
     	response["amount"] = trans.amount
+    	#response["output"] = trans.transaction_outputs
     	response_list.append(response)
-
+    print(response_list)
     response = {'transactions': response_list}
 
     return jsonify(response), 200
