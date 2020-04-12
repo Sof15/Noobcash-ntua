@@ -90,7 +90,7 @@ if __name__ == '__main__':
 	print(colored("**********************************************************","yellow"))
 	print(colored("Total time elapsed:","blue"),total_time)
 	print(colored("Number of Transactions:","blue"),c)
-	print(colored("Throughput:","blue"),throughput,"sec/transaction")
+	print(colored("Throughput:","blue"),throughput,"transaction/sec")
 	print(colored("**********************************************************","yellow"))
 	print(colored("                       Mining Stats","blue"))
 	node=0
